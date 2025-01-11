@@ -5,9 +5,13 @@ from playwright.sync_api import sync_playwright
 import requests
 from jina import Client
 
+# Load environment variables from .env file
 load_dotenv()
+
+# Fetch Jina API key from environment variable
 api_key = os.getenv("JINA_API_KEY")
 
+# Initialize Flask app
 app = Flask(__name__)
 
 # Jina client configuration
@@ -20,12 +24,12 @@ def extract_reviews_with_playwright(url):
         page = browser.new_page()
         page.goto(url)
         
-        # Wait for the reviews section to load (can be modified to suit the structure of the page)
+        # Wait for the reviews section to load (modify selector as needed)
         page.wait_for_selector('div.review')
 
         reviews = []
 
-        # Example CSS selector for review elements (this may change based on the actual product page)
+        # Example CSS selector for review elements (update this to match your structure)
         review_elements = page.query_selector_all('div.review')
 
         for review in review_elements:
@@ -41,7 +45,7 @@ def extract_reviews_with_playwright(url):
                 "reviewer": reviewer
             })
 
-        # Handle pagination if applicable (modify the selector to work with the pagination button on the page)
+        # Handle pagination if applicable
         next_page_button = page.query_selector('a.next')  # Example of pagination button
         while next_page_button:
             next_page_button.click()
@@ -59,7 +63,7 @@ def extract_reviews_with_playwright(url):
                     "rating": rating,
                     "reviewer": reviewer
                 })
-            # Check if next page button is still available, if not break
+            # Check if next page button is still available
             next_page_button = page.query_selector('a.next')
 
         browser.close()
@@ -67,7 +71,7 @@ def extract_reviews_with_playwright(url):
     return reviews
 
 def process_reviews_with_jina(reviews):
-    # Now, we send the reviews to Jina AI for processing
+    # Send reviews to Jina AI for processing
     review_texts = [f"{rev['title']} {rev['body']}" for rev in reviews]
 
     # Sending the review text to Jina model for extracting structured information
@@ -91,4 +95,5 @@ def get_reviews():
     return jsonify(result)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Ensure Flask listens on 0.0.0.0 and binds to the PORT environment variable
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=True)
