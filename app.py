@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from playwright.sync_api import sync_playwright
 from jina import Client
 
@@ -14,7 +14,7 @@ client = Client(host="https://test-d2se.onrender.com", api_key=api_key)
 
 def extract_reviews_with_playwright(url):
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)  
+        browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         page.goto(url)
         page.wait_for_selector('div.review')
@@ -63,20 +63,23 @@ def process_reviews_with_jina(reviews):
     result = client.post('/reviews', inputs=review_texts)
     return result
 
-@app.route('/', methods=['GET'])
+@app.route('/', methods=['GET', 'POST'])
 def home():
-    return jsonify({"message": "Welcome to the Review API. Use /api/reviews to fetch reviews."})
+    if request.method == 'POST':
+        url = request.form.get('url')  # Get the URL from the form
+        if not url:
+            return render_template('index.html', error="URL is required!")
 
-@app.route('/api/reviews', methods=['GET'])
-def get_reviews():
-    url = request.args.get('page')
-    if not url:
-        return jsonify({"error": "URL parameter is required"}), 400
+        # Extract reviews using Playwright for dynamic content
+        reviews = extract_reviews_with_playwright(url)
 
-    reviews = extract_reviews_with_playwright(url)
-    result = process_reviews_with_jina(reviews)
+        # Process reviews with Jina AI for structured extraction
+        result = process_reviews_with_jina(reviews)
 
-    return jsonify(result)
+        # Return the reviews and results to the user
+        return render_template('index.html', reviews=result)
+
+    return render_template('index.html')
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=True)
