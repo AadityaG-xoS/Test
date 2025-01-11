@@ -3,9 +3,16 @@ import os
 from flask import Flask, request, jsonify, render_template
 from playwright.sync_api import sync_playwright
 from jina import Client
+import subprocess
 
 load_dotenv()
 api_key = os.getenv("JINA_API_KEY")
+
+def install_playwright_browsers():
+    if not os.path.exists("/opt/render/.cache/ms-playwright"):
+        subprocess.run(["playwright", "install"], check=True)
+
+install_playwright_browsers()
 
 app = Flask(__name__)
 
