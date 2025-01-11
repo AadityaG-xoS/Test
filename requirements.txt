@@ -1,0 +1,6 @@
+flask
+playwright
+jina
+beautifulsoup4
+requests
+pandas
