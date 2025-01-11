@@ -1,12 +1,17 @@
+from dotenv import load_dotenv
+import os
 from flask import Flask, request, jsonify
 from playwright.sync_api import sync_playwright
 import requests
 from jina import Client
 
+load_dotenv()
+api_key = os.getenv("JINA_API_KEY")
+
 app = Flask(__name__)
 
 # Jina client configuration
-client = Client(host="https://<your-render-app-name>.onrender.com", api_key="YOUR_API_KEY")
+client = Client(host="https://test-d2se.onrender.com", api_key=api_key)
 
 def extract_reviews_with_playwright(url):
     # Launch Playwright to open a browser
