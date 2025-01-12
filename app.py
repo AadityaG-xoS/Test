@@ -5,12 +5,17 @@ from playwright.sync_api import sync_playwright
 from jina import Client
 import subprocess
 
+# Load environment variables
 load_dotenv()
 api_key = os.getenv("JINA_API_KEY")
+if not api_key:
+    raise EnvironmentError("JINA_API_KEY environment variable is not set.")
 
 def install_playwright_browsers():
-    if not os.path.exists("/opt/render/.cache/ms-playwright"):
+    try:
         subprocess.run(["playwright", "install"], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error installing Playwright browsers: {e}")
 
 install_playwright_browsers()
 
@@ -23,27 +28,25 @@ def extract_reviews_with_playwright(url):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
-        
-        # Navigate to the URL
-        page.goto(url)
-        
-        # Wait for the page to load completely (network idle state)
-        page.wait_for_load_state('networkidle')  # Ensure no active network requests are pending
-        
-        # Initialize an empty list to store reviews
+
         reviews = []
 
         try:
-            # Increase the timeout to 60 seconds to wait for the reviews to load
-            page.wait_for_selector('div.review', timeout=60000)  # 60 seconds timeout for reviews
+            # Navigate to the URL with increased timeout
+            page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_load_state('networkidle')
 
+            # Wait for reviews to load
+            page.wait_for_selector('div.review', timeout=60000)
+
+            # Extract reviews from the page
             review_elements = page.query_selector_all('div.review')
             for review in review_elements:
                 title = review.query_selector('.review-title').text_content().strip() if review.query_selector('.review-title') else "No title"
                 body = review.query_selector('.review-body').text_content().strip() if review.query_selector('.review-body') else "No body"
                 rating = review.query_selector('.review-rating').text_content().strip() if review.query_selector('.review-rating') else "No rating"
                 reviewer = review.query_selector('.reviewer-name').text_content().strip() if review.query_selector('.reviewer-name') else "Anonymous"
-                
+
                 reviews.append({
                     "title": title,
                     "body": body,
@@ -51,55 +54,57 @@ def extract_reviews_with_playwright(url):
                     "reviewer": reviewer
                 })
 
-            # Handle pagination and extract reviews from subsequent pages
-            next_page_button = page.query_selector('a.next')
-            while next_page_button:
+            # Handle pagination
+            while (next_page_button := page.query_selector('a.next')):
                 next_page_button.click()
-                page.wait_for_selector('div.review')
+                page.wait_for_selector('div.review', timeout=60000)
                 review_elements = page.query_selector_all('div.review')
                 for review in review_elements:
                     title = review.query_selector('.review-title').text_content().strip() if review.query_selector('.review-title') else "No title"
                     body = review.query_selector('.review-body').text_content().strip() if review.query_selector('.review-body') else "No body"
                     rating = review.query_selector('.review-rating').text_content().strip() if review.query_selector('.review-rating') else "No rating"
                     reviewer = review.query_selector('.reviewer-name').text_content().strip() if review.query_selector('.reviewer-name') else "Anonymous"
-                    
+
                     reviews.append({
                         "title": title,
                         "body": body,
                         "rating": rating,
                         "reviewer": reviewer
                     })
-                next_page_button = page.query_selector('a.next')
 
         except Exception as e:
-            print(f"Error while fetching reviews: {str(e)}")
-        
-        # Optional: Capture a screenshot for debugging if needed
-        page.screenshot(path='screenshot.png')  # This will save the screenshot in the current directory
+            print(f"Error while fetching reviews: {e}")
+        finally:
+            browser.close()
 
-        browser.close()
-    return reviews
+        return reviews
 
 def process_reviews_with_jina(reviews):
-    review_texts = [f"{rev['title']} {rev['body']}" for rev in reviews]
-    result = client.post('/reviews', inputs=review_texts)
-    return result
+    try:
+        review_texts = [f"{rev['title']} {rev['body']}" for rev in reviews]
+        result = client.post('/reviews', inputs=review_texts)
+        return result
+    except Exception as e:
+        print(f"Error while processing reviews with Jina: {e}")
+        return []
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
     if request.method == 'POST':
-        url = request.form.get('url')  # Get the URL from the form
+        url = request.form.get('url')
         if not url:
             return render_template('index.html', error="URL is required!")
 
-        # Extract reviews using Playwright for dynamic content
-        reviews = extract_reviews_with_playwright(url)
+        try:
+            # Extract reviews using Playwright
+            reviews = extract_reviews_with_playwright(url)
 
-        # Process reviews with Jina AI for structured extraction
-        result = process_reviews_with_jina(reviews)
+            # Process reviews with Jina AI
+            result = process_reviews_with_jina(reviews)
 
-        # Return the reviews and results to the user
-        return render_template('index.html', reviews=result)
+            return render_template('index.html', reviews=result)
+        except Exception as e:
+            return render_template('index.html', error=f"Error: {str(e)}")
 
     return render_template('index.html')
 
