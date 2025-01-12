@@ -4,6 +4,10 @@ from flask import Flask, request, jsonify, render_template
 from playwright.sync_api import sync_playwright
 from jina import Client
 import subprocess
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Load environment variables
 load_dotenv()
@@ -13,9 +17,9 @@ if not api_key:
 
 def install_playwright_browsers():
     try:
-        subprocess.run(["playwright", "install"], check=True)
+        subprocess.run(["playwright", "install", "--with-deps"], check=True)
     except subprocess.CalledProcessError as e:
-        print(f"Error installing Playwright browsers: {e}")
+        logging.error(f"Error installing Playwright browsers: {e}")
 
 install_playwright_browsers()
 
@@ -73,7 +77,7 @@ def extract_reviews_with_playwright(url):
                     })
 
         except Exception as e:
-            print(f"Error while fetching reviews: {e}")
+            logging.error(f"Error while fetching reviews: {e}")
         finally:
             browser.close()
 
@@ -85,7 +89,7 @@ def process_reviews_with_jina(reviews):
         result = client.post('/reviews', inputs=review_texts)
         return result
     except Exception as e:
-        print(f"Error while processing reviews with Jina: {e}")
+        logging.error(f"Error while processing reviews with Jina: {e}")
         return []
 
 @app.route('/', methods=['GET', 'POST'])
@@ -99,15 +103,18 @@ def home():
             # Extract reviews using Playwright
             reviews = extract_reviews_with_playwright(url)
 
+            if not reviews:
+                return render_template('index.html', error="No reviews found on the provided URL.")
+
             # Process reviews with Jina AI
             result = process_reviews_with_jina(reviews)
 
             return render_template('index.html', reviews=result)
         except Exception as e:
+            logging.error(f"Error in home route: {e}")
             return render_template('index.html', error=f"Error: {str(e)}")
 
     return render_template('index.html')
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=True)
-
