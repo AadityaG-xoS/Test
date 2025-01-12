@@ -7,7 +7,8 @@ import subprocess
 import logging
 
 # Configure logging
-logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -17,11 +18,17 @@ if not api_key:
 
 def install_playwright_browsers():
     try:
+        logger.info("Installing Playwright browsers...")
         subprocess.run(["playwright", "install", "--with-deps"], check=True)
+        logger.info("Playwright browsers installed successfully.")
     except subprocess.CalledProcessError as e:
-        logging.error(f"Error installing Playwright browsers: {e}")
+        logger.error(f"Error installing Playwright browsers: {e}")
+        raise RuntimeError("Playwright browser installation failed.")
 
-install_playwright_browsers()
+try:
+    install_playwright_browsers()
+except RuntimeError as e:
+    logger.error(f"Setup failed: {e}")
 
 app = Flask(__name__)
 
@@ -34,9 +41,8 @@ def extract_reviews_with_playwright(url):
         page = browser.new_page()
 
         reviews = []
-
         try:
-            # Navigate to the URL with increased timeout
+            logger.info(f"Navigating to URL: {url}")
             page.goto(url, wait_until="domcontentloaded", timeout=60000)
             page.wait_for_load_state('networkidle')
 
@@ -57,27 +63,8 @@ def extract_reviews_with_playwright(url):
                     "rating": rating,
                     "reviewer": reviewer
                 })
-
-            # Handle pagination
-            while (next_page_button := page.query_selector('a.next')):
-                next_page_button.click()
-                page.wait_for_selector('div.review', timeout=60000)
-                review_elements = page.query_selector_all('div.review')
-                for review in review_elements:
-                    title = review.query_selector('.review-title').text_content().strip() if review.query_selector('.review-title') else "No title"
-                    body = review.query_selector('.review-body').text_content().strip() if review.query_selector('.review-body') else "No body"
-                    rating = review.query_selector('.review-rating').text_content().strip() if review.query_selector('.review-rating') else "No rating"
-                    reviewer = review.query_selector('.reviewer-name').text_content().strip() if review.query_selector('.reviewer-name') else "Anonymous"
-
-                    reviews.append({
-                        "title": title,
-                        "body": body,
-                        "rating": rating,
-                        "reviewer": reviewer
-                    })
-
         except Exception as e:
-            logging.error(f"Error while fetching reviews: {e}")
+            logger.error(f"Error while fetching reviews: {e}")
         finally:
             browser.close()
 
@@ -87,9 +74,10 @@ def process_reviews_with_jina(reviews):
     try:
         review_texts = [f"{rev['title']} {rev['body']}" for rev in reviews]
         result = client.post('/reviews', inputs=review_texts)
+        logger.info("Reviews processed successfully with Jina.")
         return result
     except Exception as e:
-        logging.error(f"Error while processing reviews with Jina: {e}")
+        logger.error(f"Error while processing reviews with Jina: {e}")
         return []
 
 @app.route('/', methods=['GET', 'POST'])
@@ -103,15 +91,11 @@ def home():
             # Extract reviews using Playwright
             reviews = extract_reviews_with_playwright(url)
 
-            if not reviews:
-                return render_template('index.html', error="No reviews found on the provided URL.")
-
             # Process reviews with Jina AI
             result = process_reviews_with_jina(reviews)
 
             return render_template('index.html', reviews=result)
         except Exception as e:
-            logging.error(f"Error in home route: {e}")
             return render_template('index.html', error=f"Error: {str(e)}")
 
     return render_template('index.html')
