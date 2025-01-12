@@ -23,44 +23,59 @@ def extract_reviews_with_playwright(url):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
+        
+        # Navigate to the URL
         page.goto(url)
-        page.wait_for_selector('div.review')
-
+        
+        # Wait for the page to load completely (network idle state)
+        page.wait_for_load_state('networkidle')  # Ensure no active network requests are pending
+        
+        # Initialize an empty list to store reviews
         reviews = []
 
-        review_elements = page.query_selector_all('div.review')
+        try:
+            # Increase the timeout to 60 seconds to wait for the reviews to load
+            page.wait_for_selector('div.review', timeout=60000)  # 60 seconds timeout for reviews
 
-        for review in review_elements:
-            title = review.query_selector('.review-title').text_content().strip() if review.query_selector('.review-title') else "No title"
-            body = review.query_selector('.review-body').text_content().strip() if review.query_selector('.review-body') else "No body"
-            rating = review.query_selector('.review-rating').text_content().strip() if review.query_selector('.review-rating') else "No rating"
-            reviewer = review.query_selector('.reviewer-name').text_content().strip() if review.query_selector('.reviewer-name') else "Anonymous"
-
-            reviews.append({
-                "title": title,
-                "body": body,
-                "rating": rating,
-                "reviewer": reviewer
-            })
-
-        next_page_button = page.query_selector('a.next')
-        while next_page_button:
-            next_page_button.click()
-            page.wait_for_selector('div.review')
             review_elements = page.query_selector_all('div.review')
             for review in review_elements:
                 title = review.query_selector('.review-title').text_content().strip() if review.query_selector('.review-title') else "No title"
                 body = review.query_selector('.review-body').text_content().strip() if review.query_selector('.review-body') else "No body"
                 rating = review.query_selector('.review-rating').text_content().strip() if review.query_selector('.review-rating') else "No rating"
                 reviewer = review.query_selector('.reviewer-name').text_content().strip() if review.query_selector('.reviewer-name') else "Anonymous"
-
+                
                 reviews.append({
                     "title": title,
                     "body": body,
                     "rating": rating,
                     "reviewer": reviewer
                 })
+
+            # Handle pagination and extract reviews from subsequent pages
             next_page_button = page.query_selector('a.next')
+            while next_page_button:
+                next_page_button.click()
+                page.wait_for_selector('div.review')
+                review_elements = page.query_selector_all('div.review')
+                for review in review_elements:
+                    title = review.query_selector('.review-title').text_content().strip() if review.query_selector('.review-title') else "No title"
+                    body = review.query_selector('.review-body').text_content().strip() if review.query_selector('.review-body') else "No body"
+                    rating = review.query_selector('.review-rating').text_content().strip() if review.query_selector('.review-rating') else "No rating"
+                    reviewer = review.query_selector('.reviewer-name').text_content().strip() if review.query_selector('.reviewer-name') else "Anonymous"
+                    
+                    reviews.append({
+                        "title": title,
+                        "body": body,
+                        "rating": rating,
+                        "reviewer": reviewer
+                    })
+                next_page_button = page.query_selector('a.next')
+
+        except Exception as e:
+            print(f"Error while fetching reviews: {str(e)}")
+        
+        # Optional: Capture a screenshot for debugging if needed
+        page.screenshot(path='screenshot.png')  # This will save the screenshot in the current directory
 
         browser.close()
     return reviews
