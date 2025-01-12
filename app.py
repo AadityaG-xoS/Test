@@ -2,8 +2,9 @@ from dotenv import load_dotenv
 import os
 from flask import Flask, request, jsonify, render_template
 from playwright.sync_api import sync_playwright
-from jina import Client
+from jina import Client, Flow
 import subprocess
+from jina.types.request.data import DataRequest
 
 # Load environment variables
 load_dotenv()
@@ -21,8 +22,29 @@ install_playwright_browsers()
 
 app = Flask(__name__)
 
+# Jina Flow Configuration
+def start_jina_flow():
+    """
+    Defines and starts a Jina Flow with an endpoint to process reviews.
+    """
+    flow = (
+        Flow(port=12345)
+        .add(
+            name="text_processor",
+            uses="jinahub://TransformerTorchEncoder",  # Replace with your custom Executor if needed
+        )
+    )
+
+    # Start the Flow in a background thread
+    flow.start()
+    print("Jina Flow is running!")
+    return flow
+
+# Start the Jina Flow
+jina_flow = start_jina_flow()
+
 # Jina client configuration
-client = Client(host="https://test-d2se.onrender.com", api_key=api_key)
+client = Client(host="http://localhost:12345")  # Use the local Flow URL
 
 def extract_reviews_with_playwright(url):
     with sync_playwright() as p:
@@ -82,7 +104,7 @@ def extract_reviews_with_playwright(url):
 def process_reviews_with_jina(reviews):
     try:
         review_texts = [f"{rev['title']} {rev['body']}" for rev in reviews]
-        result = client.post('/reviews', inputs=review_texts)
+        result = client.post("/index", inputs=review_texts)  # Default `/index` endpoint
         return result
     except Exception as e:
         print(f"Error while processing reviews with Jina: {e}")
@@ -109,4 +131,8 @@ def home():
     return render_template('index.html')
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=True)
+    try:
+        app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=True)
+    finally:
+        jina_flow.close()  # Clean up Jina Flow when Flask stops
+
