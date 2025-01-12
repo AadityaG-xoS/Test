@@ -4,3 +4,4 @@ jina
 beautifulsoup4
 requests
 pandas
+transformers>=4.12.0
