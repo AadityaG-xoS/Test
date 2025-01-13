@@ -6,3 +6,5 @@ requests
 pandas
 transformers>=4.12.0
 cohere
+scrapy
+scrapy_splash

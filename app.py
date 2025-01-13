@@ -1,10 +1,13 @@
 from dotenv import load_dotenv
 import os
 from flask import Flask, request, jsonify, render_template
-from playwright.sync_api import sync_playwright
 import cohere
-import subprocess
 import logging
+import scrapy
+from scrapy_splash import SplashRequest
+from scrapy.crawler import CrawlerProcess
+from scrapy.settings import Settings
+from scrapy.http import HtmlResponse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,20 +21,6 @@ if not cohere_api_key:
 
 # Initialize Cohere Client
 cohere_client = cohere.Client(cohere_api_key)
-
-def install_playwright_browsers():
-    try:
-        logger.info("Installing Playwright browsers...")
-        subprocess.run(["playwright", "install"], check=True)
-        logger.info("Playwright browsers installed successfully.")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Error installing Playwright browsers: {e}")
-        raise RuntimeError("Playwright browser installation failed.")
-
-try:
-    install_playwright_browsers()
-except RuntimeError as e:
-    logger.error(f"Setup failed: {e}")
 
 app = Flask(__name__)
 
@@ -75,49 +64,63 @@ def identify_selectors_with_cohere(url):
         logger.error(f"Error while identifying selectors with Cohere: {e}")
         return None
 
-def extract_reviews_with_playwright(url, selectors):
-    if not selectors:
-        logger.error("Selectors are empty or invalid.")
-        return []
+class ReviewSpider(scrapy.Spider):
+    name = "review_spider"
+    
+    def __init__(self, url, selectors, *args, **kwargs):
+        super(ReviewSpider, self).__init__(*args, **kwargs)
+        self.url = url
+        self.selectors = selectors
 
+    def start_requests(self):
+        yield SplashRequest(self.url, self.parse, args={'wait': 2})
+
+    def parse(self, response):
+        reviews = []
+        review_elements = response.css(self.selectors.get('review', 'div.review'))
+        
+        for review in review_elements:
+            title = review.css(self.selectors.get('title', '.review-title::text')).get(default="No title").strip()
+            body = review.css(self.selectors.get('body', '.review-body::text')).get(default="No body").strip()
+            rating = review.css(self.selectors.get('rating', '.review-rating::text')).get(default="No rating").strip()
+            reviewer = review.css(self.selectors.get('reviewer', '.reviewer-name::text')).get(default="Anonymous").strip()
+
+            reviews.append({
+                "title": title,
+                "body": body,
+                "rating": rating,
+                "reviewer": reviewer
+            })
+        
+        logger.info(f"Extracted {len(reviews)} reviews.")
+        return reviews
+
+def extract_reviews_with_scrapy(url, selectors):
     reviews = []
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
 
-        try:
-            logger.info(f"Navigating to URL: {url}")
-            page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_load_state('networkidle')
+    settings = Settings()
+    settings.set('BOT_NAME', 'scrapybot')
+    settings.set('ROBOTSTXT_OBEY', False)
+    settings.set('DOWNLOADER_MIDDLEWARES', {
+        'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware': None,
+        'scrapy_splash.SplashMiddleware': 725,
+    })
+    settings.set('SPIDER_MIDDLEWARES', {
+        'scrapy_splash.SplashDeduplicateArgsMiddleware': 100,
+    })
+    settings.set('DUPEFILTER_CLASS', 'scrapy_splash.SplashAwareDupeFilter')
+    settings.set('SPLASH_URL', 'http://localhost:8050')
 
-            # Validate and use the review selector
-            review_selector = selectors.get('review', 'div.review')
-            if not page.query_selector(review_selector):
-                logger.warning(f"No elements found for the selector: {review_selector}")
-                return []
+    process = CrawlerProcess(settings)
+    spider = ReviewSpider(url, selectors)
+    process.crawl(spider)
+    
+    try:
+        process.start()
+    except Exception as e:
+        logger.error(f"Error while scraping with Scrapy: {e}")
 
-            # Extract review details
-            review_elements = page.query_selector_all(review_selector)
-            for review in review_elements:
-                title = review.query_selector(selectors.get('title', '.review-title'))
-                body = review.query_selector(selectors.get('body', '.review-body'))
-                rating = review.query_selector(selectors.get('rating', '.review-rating'))
-                reviewer = review.query_selector(selectors.get('reviewer', '.reviewer-name'))
-
-                reviews.append({
-                    "title": title.text_content().strip() if title else "No title",
-                    "body": body.text_content().strip() if body else "No body",
-                    "rating": rating.text_content().strip() if rating else "No rating",
-                    "reviewer": reviewer.text_content().strip() if reviewer else "Anonymous"
-                })
-
-            logger.info(f"Extracted {len(reviews)} reviews.")
-        except Exception as e:
-            logger.error(f"Error while extracting reviews: {e}")
-        finally:
-            browser.close()
-
-    return reviews
+    return spider.reviews
 
 def process_reviews_with_cohere(reviews):
     try:
@@ -152,8 +155,8 @@ def home():
             if not selectors:
                 return render_template('index.html', error="Could not identify selectors for the URL!")
 
-            # Extract reviews using Playwright with dynamic selectors
-            reviews = extract_reviews_with_playwright(url, selectors)
+            # Extract reviews using Scrapy with dynamic selectors
+            reviews = extract_reviews_with_scrapy(url, selectors)
             if not reviews:
                 return render_template('index.html', error="No reviews found!")
 
