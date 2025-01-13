@@ -34,12 +34,25 @@ app = Flask(__name__)
 
 # Jina client configuration
 os.environ["JINA_AUTH_TOKEN"] = api_key  # Set the API key as an environment variable
-client = Client(host="https://test-d2se.onrender.com")  # Do not pass `api_key` directly
+client = Client(host="https://test-d2se.onrender.com")  # Use your Jina client endpoint here
 
+def identify_selectors_with_jina(url):
+    try:
+        logger.info(f"Sending URL to Jina for selector identification: {url}")
+        result = client.post('/identify_selectors', inputs=[url])
+        if not result:
+            logger.error("No selectors identified by Jina.")
+            return None
+        selectors = result[0]  # Assuming Jina returns a dictionary with identified selectors
+        logger.info(f"Selectors identified by Jina: {selectors}")
+        return selectors
+    except Exception as e:
+        logger.error(f"Error while identifying selectors with Jina: {e}")
+        return None
 
-def extract_reviews_with_playwright(url):
+def extract_reviews_with_playwright(url, selectors):
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=True)  # Set headless=False for debugging
         page = browser.new_page()
 
         reviews = []
@@ -48,16 +61,16 @@ def extract_reviews_with_playwright(url):
             page.goto(url, wait_until="domcontentloaded", timeout=60000)
             page.wait_for_load_state('networkidle')
 
-            # Wait for reviews to load
-            page.wait_for_selector('div.review', timeout=60000)
+            # Wait for the review selector to load
+            page.wait_for_selector(selectors.get('review', 'div.review'), timeout=60000)
 
-            # Extract reviews from the page
-            review_elements = page.query_selector_all('div.review')
+            # Extract reviews from the page using dynamic selectors
+            review_elements = page.query_selector_all(selectors.get('review', 'div.review'))
             for review in review_elements:
-                title = review.query_selector('.review-title').text_content().strip() if review.query_selector('.review-title') else "No title"
-                body = review.query_selector('.review-body').text_content().strip() if review.query_selector('.review-body') else "No body"
-                rating = review.query_selector('.review-rating').text_content().strip() if review.query_selector('.review-rating') else "No rating"
-                reviewer = review.query_selector('.reviewer-name').text_content().strip() if review.query_selector('.reviewer-name') else "Anonymous"
+                title = review.query_selector(selectors.get('title', '.review-title')).text_content().strip() if review.query_selector(selectors.get('title', '.review-title')) else "No title"
+                body = review.query_selector(selectors.get('body', '.review-body')).text_content().strip() if review.query_selector(selectors.get('body', '.review-body')) else "No body"
+                rating = review.query_selector(selectors.get('rating', '.review-rating')).text_content().strip() if review.query_selector(selectors.get('rating', '.review-rating')) else "No rating"
+                reviewer = review.query_selector(selectors.get('reviewer', '.reviewer-name')).text_content().strip() if review.query_selector(selectors.get('reviewer', '.reviewer-name')) else "Anonymous"
 
                 reviews.append({
                     "title": title,
@@ -65,6 +78,10 @@ def extract_reviews_with_playwright(url):
                     "rating": rating,
                     "reviewer": reviewer
                 })
+
+            logger.info(f"Extracted {len(reviews)} reviews.")
+        except TimeoutError:
+            logger.error(f"Timeout error while fetching reviews from {url}.")
         except Exception as e:
             logger.error(f"Error while fetching reviews: {e}")
         finally:
@@ -75,6 +92,7 @@ def extract_reviews_with_playwright(url):
 def process_reviews_with_jina(reviews):
     try:
         review_texts = [f"{rev['title']} {rev['body']}" for rev in reviews]
+        logger.info("Sending reviews to Jina for processing.")
         result = client.post('/reviews', inputs=review_texts)
         logger.info("Reviews processed successfully with Jina.")
         return result
@@ -90,14 +108,23 @@ def home():
             return render_template('index.html', error="URL is required!")
 
         try:
-            # Extract reviews using Playwright
-            reviews = extract_reviews_with_playwright(url)
+            # Identify selectors using Jina
+            selectors = identify_selectors_with_jina(url)
+            if not selectors:
+                return render_template('index.html', error="Could not identify selectors for the URL!")
+
+            # Extract reviews using Playwright with dynamic selectors
+            reviews = extract_reviews_with_playwright(url, selectors)
+
+            if not reviews:
+                return render_template('index.html', error="No reviews found!")
 
             # Process reviews with Jina AI
             result = process_reviews_with_jina(reviews)
 
             return render_template('index.html', reviews=result)
         except Exception as e:
+            logger.error(f"Error in processing: {e}")
             return render_template('index.html', error=f"Error: {str(e)}")
 
     return render_template('index.html')
