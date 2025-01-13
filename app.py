@@ -19,7 +19,7 @@ if not api_key:
 def install_playwright_browsers():
     try:
         logger.info("Installing Playwright browsers...")
-        subprocess.run(["playwright", "install", "--with-deps"], check=True)
+        subprocess.run(["playwright", "install"], check=True)
         logger.info("Playwright browsers installed successfully.")
     except subprocess.CalledProcessError as e:
         logger.error(f"Error installing Playwright browsers: {e}")
