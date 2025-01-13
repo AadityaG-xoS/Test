@@ -32,7 +32,7 @@ except RuntimeError as e:
 
 app = Flask(__name__)
 
-# Define Jina Flow
+# Define Jina Flow with actual executor URLs
 flow = Flow(protocol="http", port=12345).add(
     name="SelectorIdentifier",
     uses="jinahub://ExecutorToIdentifySelectors"  # Replace with your actual executor from Jina Hub
@@ -52,7 +52,26 @@ client = Client(host="http://0.0.0.0:12345")  # Jina Flow runs locally on the sp
 def identify_selectors_with_jina(url):
     try:
         logger.info(f"Sending URL to Jina for selector identification: {url}")
-        result = client.post("/SelectorIdentifier", inputs=DocumentArray([url]))
+        
+        # Create a prompt to instruct Jina to detect the selectors
+        prompt = f"""
+        Analyze the page at {url} and identify CSS selectors for the following:
+        - Review container
+        - Review title
+        - Review body
+        - Review rating
+        - Reviewer name
+        Return the selectors in the form of a dictionary, for example:
+        {{
+            "review": "div.review",
+            "title": ".review-title",
+            "body": ".review-body",
+            "rating": ".review-rating",
+            "reviewer": ".reviewer-name"
+        }}
+        """
+
+        result = client.post("/SelectorIdentifier", inputs=DocumentArray([prompt]))
         if not result or not result[0]:
             logger.error("No selectors identified by Jina.")
             return None
