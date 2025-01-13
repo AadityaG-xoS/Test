@@ -3,11 +3,7 @@ import os
 from flask import Flask, request, jsonify, render_template
 import cohere
 import logging
-import scrapy
-from scrapy_splash import SplashRequest
-from scrapy.crawler import CrawlerProcess
-from scrapy.settings import Settings
-from scrapy.http import HtmlResponse
+from zyte_api import ZyteAPI
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -15,20 +11,24 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
-cohere_api_key = os.getenv("COHERE_API_KEY")  # Make sure your API key is set as an environment variable
+cohere_api_key = os.getenv("COHERE_API_KEY")
+zyte_api_key = os.getenv("ZYTE_API_KEY")
+
 if not cohere_api_key:
     raise EnvironmentError("COHERE_API_KEY environment variable is not set.")
+if not zyte_api_key:
+    raise EnvironmentError("ZYTE_API_KEY environment variable is not set.")
 
-# Initialize Cohere Client
+# Initialize Cohere and Zyte Clients
 cohere_client = cohere.Client(cohere_api_key)
+zyte_client = ZyteAPI(zyte_api_key)
 
 app = Flask(__name__)
 
 def identify_selectors_with_cohere(url):
     try:
         logger.info(f"Sending URL to Cohere for selector identification: {url}")
-        
-        # Create a prompt to instruct Cohere to detect the selectors
+
         prompt = f"""
         Analyze the page at {url} and identify CSS selectors for the following:
         - Review container
@@ -46,11 +46,10 @@ def identify_selectors_with_cohere(url):
         }}
         """
 
-        # Send the prompt to Cohere for generating CSS selectors
         response = cohere_client.generate(
-            model='command-xlarge',  # Use Cohere's best model for this task
+            model='command-xlarge',
             prompt=prompt,
-            max_tokens=150,  # Limit response length
+            max_tokens=150,
             temperature=0.5
         )
 
@@ -59,31 +58,32 @@ def identify_selectors_with_cohere(url):
             logger.error("No selectors identified by Cohere.")
             return None
         logger.info(f"Selectors identified by Cohere: {selectors}")
-        return selectors
+        return eval(selectors)
     except Exception as e:
         logger.error(f"Error while identifying selectors with Cohere: {e}")
         return None
 
-class ReviewSpider(scrapy.Spider):
-    name = "review_spider"
-    
-    def __init__(self, url, selectors, *args, **kwargs):
-        super(ReviewSpider, self).__init__(*args, **kwargs)
-        self.url = url
-        self.selectors = selectors
-
-    def start_requests(self):
-        yield SplashRequest(self.url, self.parse, args={'wait': 2})
-
-    def parse(self, response):
+def extract_reviews_with_zyte(url, selectors):
+    try:
+        logger.info(f"Sending request to Zyte for URL: {url}")
+        response = zyte_client.get(url)
         reviews = []
-        review_elements = response.css(self.selectors.get('review', 'div.review'))
-        
+
+        if response.status != 200:
+            logger.error(f"Failed to fetch the page with Zyte. Status: {response.status}")
+            return reviews
+
+        # Parse the HTML response
+        from scrapy.http import HtmlResponse
+        scrapy_response = HtmlResponse(url=url, body=response.content, encoding='utf-8')
+
+        # Extract reviews based on selectors
+        review_elements = scrapy_response.css(selectors.get('review', 'div.review'))
         for review in review_elements:
-            title = review.css(self.selectors.get('title', '.review-title::text')).get(default="No title").strip()
-            body = review.css(self.selectors.get('body', '.review-body::text')).get(default="No body").strip()
-            rating = review.css(self.selectors.get('rating', '.review-rating::text')).get(default="No rating").strip()
-            reviewer = review.css(self.selectors.get('reviewer', '.reviewer-name::text')).get(default="Anonymous").strip()
+            title = review.css(selectors.get('title', '.review-title::text')).get(default="No title").strip()
+            body = review.css(selectors.get('body', '.review-body::text')).get(default="No body").strip()
+            rating = review.css(selectors.get('rating', '.review-rating::text')).get(default="No rating").strip()
+            reviewer = review.css(selectors.get('reviewer', '.reviewer-name::text')).get(default="Anonymous").strip()
 
             reviews.append({
                 "title": title,
@@ -91,56 +91,31 @@ class ReviewSpider(scrapy.Spider):
                 "rating": rating,
                 "reviewer": reviewer
             })
-        
+
         logger.info(f"Extracted {len(reviews)} reviews.")
         return reviews
-
-def extract_reviews_with_scrapy(url, selectors):
-    reviews = []
-
-    settings = Settings()
-    settings.set('BOT_NAME', 'scrapybot')
-    settings.set('ROBOTSTXT_OBEY', False)
-    settings.set('DOWNLOADER_MIDDLEWARES', {
-        'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware': None,
-        'scrapy_splash.SplashMiddleware': 725,
-    })
-    settings.set('SPIDER_MIDDLEWARES', {
-        'scrapy_splash.SplashDeduplicateArgsMiddleware': 100,
-    })
-    settings.set('DUPEFILTER_CLASS', 'scrapy_splash.SplashAwareDupeFilter')
-    settings.set('SPLASH_URL', 'http://localhost:8050')
-
-    process = CrawlerProcess(settings)
-    spider = ReviewSpider(url, selectors)
-    process.crawl(spider)
-    
-    try:
-        process.start()
     except Exception as e:
-        logger.error(f"Error while scraping with Scrapy: {e}")
-
-    return spider.reviews
+        logger.error(f"Error while scraping with Zyte: {e}")
+        return []
 
 def process_reviews_with_cohere(reviews):
     try:
         review_texts = [f"{rev['title']} {rev['body']}" for rev in reviews]
         logger.info("Sending reviews to Cohere for processing.")
-        
-        # Send the reviews to Cohere for processing
+
         response = cohere_client.generate(
             model='command-xlarge',
             prompt="Process these reviews and provide a sentiment analysis summary:\n" + "\n".join(review_texts),
             max_tokens=200,
             temperature=0.5
         )
-        
+
         processed_reviews = response.generations[0].text.strip()
         logger.info("Reviews processed successfully with Cohere.")
         return processed_reviews
     except Exception as e:
         logger.error(f"Error while processing reviews with Cohere: {e}")
-        return []
+        return "Error processing reviews."
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
@@ -155,8 +130,8 @@ def home():
             if not selectors:
                 return render_template('index.html', error="Could not identify selectors for the URL!")
 
-            # Extract reviews using Scrapy with dynamic selectors
-            reviews = extract_reviews_with_scrapy(url, selectors)
+            # Extract reviews using Zyte with dynamic selectors
+            reviews = extract_reviews_with_zyte(url, selectors)
             if not reviews:
                 return render_template('index.html', error="No reviews found!")
 
