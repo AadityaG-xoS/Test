@@ -33,7 +33,9 @@ except RuntimeError as e:
 app = Flask(__name__)
 
 # Jina client configuration
-client = Client(host="https://test-d2se.onrender.com", api_key=api_key)
+os.environ["JINA_AUTH_TOKEN"] = api_key  # Set the API key as an environment variable
+client = Client(host="https://test-d2se.onrender.com")  # Do not pass `api_key` directly
+
 
 def extract_reviews_with_playwright(url):
     with sync_playwright() as p:
