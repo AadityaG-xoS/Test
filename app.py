@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 import os
 from flask import Flask, request, jsonify, render_template
 from playwright.sync_api import sync_playwright
-from jina import Client
+from jina import Flow, DocumentArray, Client
 import subprocess
 import logging
 
@@ -32,18 +32,31 @@ except RuntimeError as e:
 
 app = Flask(__name__)
 
+# Define Jina Flow
+flow = Flow(protocol="http", port=12345).add(
+    name="SelectorIdentifier",
+    uses="jinahub://ExecutorToIdentifySelectors"  # Replace with your actual executor from Jina Hub
+).add(
+    name="ReviewProcessor",
+    uses="jinahub://ExecutorToProcessReviews"  # Replace with your actual executor from Jina Hub
+)
+
+# Start the Flow
+with flow:
+    flow.block()  # This keeps the Flow running
+
 # Jina client configuration
 os.environ["JINA_AUTH_TOKEN"] = api_key  # Set the API key as an environment variable
-client = Client(host="https://test-d2se.onrender.com")  # Use your Jina client endpoint here
+client = Client(host="http://0.0.0.0:12345")  # Jina Flow runs locally on the specified port
 
 def identify_selectors_with_jina(url):
     try:
         logger.info(f"Sending URL to Jina for selector identification: {url}")
-        result = client.post('/identify_selectors', inputs=[url])
+        result = client.post("/SelectorIdentifier", inputs=DocumentArray([url]))
         if not result or not result[0]:
             logger.error("No selectors identified by Jina.")
             return None
-        selectors = result[0]  # Assuming Jina returns a dictionary with identified selectors
+        selectors = result[0].tags  # Assuming Jina adds selectors to the tags field
         logger.info(f"Selectors identified by Jina: {selectors}")
         return selectors
     except Exception as e:
@@ -98,7 +111,7 @@ def process_reviews_with_jina(reviews):
     try:
         review_texts = [f"{rev['title']} {rev['body']}" for rev in reviews]
         logger.info("Sending reviews to Jina for processing.")
-        result = client.post('/reviews', inputs=review_texts)
+        result = client.post("/ReviewProcessor", inputs=DocumentArray(review_texts))
         logger.info("Reviews processed successfully with Jina.")
         return result
     except Exception as e:
