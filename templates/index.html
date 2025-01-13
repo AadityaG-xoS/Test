@@ -3,33 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Review Scraper</title>
+    <title>Review Scraper and Processor</title>
 </head>
 <body>
-    <h1>Review Scraper</h1>
-    <form action="/" method="post">
-        <label for="url">Product URL:</label>
-        <input type="url" id="url" name="url" placeholder="Enter product URL" required>
-        <button type="submit">Get Reviews</button>
+    <h1>Review Scraper and Processor</h1>
+    
+    <!-- Form to input the URL -->
+    <form method="POST" action="/">
+        <label for="url">Enter URL:</label>
+        <input type="text" id="url" name="url" placeholder="Enter the page URL" required>
+        <button type="submit">Scrape Reviews</button>
     </form>
-
+    
+    <!-- Display error message if there's an issue -->
     {% if error %}
-    <p style="color: red;">{{ error }}</p>
+        <div style="color: red; margin-top: 20px;">
+            <strong>Error:</strong> {{ error }}
+        </div>
     {% endif %}
 
+    <!-- Display reviews after processing -->
     {% if reviews %}
-    <h2>Extracted Reviews</h2>
-    <ul>
-        {% for review in reviews %}
-            <li>
-                <strong>{{ review['title'] }}</strong><br>
-                <em>Rating: {{ review['rating'] }}</em><br>
-                <p>{{ review['body'] }}</p>
-                <small>- {{ review['reviewer'] }}</small>
-                <hr>
-            </li>
-        {% endfor %}
-    </ul>
+        <div style="margin-top: 20px;">
+            <h2>Processed Reviews</h2>
+            <ul>
+                {% for review in reviews %}
+                    <li>
+                        <h3>{{ review['title'] }}</h3>
+                        <p><strong>Rating:</strong> {{ review['rating'] }}</p>
+                        <p><strong>Reviewer:</strong> {{ review['reviewer'] }}</p>
+                        <p>{{ review['body'] }}</p>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
     {% endif %}
 </body>
 </html>

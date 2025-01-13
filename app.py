@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 import os
 from flask import Flask, request, jsonify, render_template
 from playwright.sync_api import sync_playwright
-from jina import Flow, DocumentArray, Client
+import cohere
 import subprocess
 import logging
 
@@ -12,9 +12,12 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
-api_key = os.getenv("JINA_API_KEY")
-if not api_key:
-    raise EnvironmentError("JINA_API_KEY environment variable is not set.")
+cohere_api_key = os.getenv("COHERE_API_KEY")  # Make sure your API key is set as an environment variable
+if not cohere_api_key:
+    raise EnvironmentError("COHERE_API_KEY environment variable is not set.")
+
+# Initialize Cohere Client
+cohere_client = cohere.Client(cohere_api_key)
 
 def install_playwright_browsers():
     try:
@@ -32,28 +35,11 @@ except RuntimeError as e:
 
 app = Flask(__name__)
 
-# Define Jina Flow with actual executor URLs
-flow = Flow(protocol="http", port=12345).add(
-    name="SelectorIdentifier",
-    uses="jinahub://ExecutorToIdentifySelectors"  # Replace with your actual executor from Jina Hub
-).add(
-    name="ReviewProcessor",
-    uses="jinahub://ExecutorToProcessReviews"  # Replace with your actual executor from Jina Hub
-)
-
-# Start the Flow
-with flow:
-    flow.block()  # This keeps the Flow running
-
-# Jina client configuration
-os.environ["JINA_AUTH_TOKEN"] = api_key  # Set the API key as an environment variable
-client = Client(host="http://0.0.0.0:12345")  # Jina Flow runs locally on the specified port
-
-def identify_selectors_with_jina(url):
+def identify_selectors_with_cohere(url):
     try:
-        logger.info(f"Sending URL to Jina for selector identification: {url}")
+        logger.info(f"Sending URL to Cohere for selector identification: {url}")
         
-        # Create a prompt to instruct Jina to detect the selectors
+        # Create a prompt to instruct Cohere to detect the selectors
         prompt = f"""
         Analyze the page at {url} and identify CSS selectors for the following:
         - Review container
@@ -71,15 +57,22 @@ def identify_selectors_with_jina(url):
         }}
         """
 
-        result = client.post("/SelectorIdentifier", inputs=DocumentArray([prompt]))
-        if not result or not result[0]:
-            logger.error("No selectors identified by Jina.")
+        # Send the prompt to Cohere for generating CSS selectors
+        response = cohere_client.generate(
+            model='command-xlarge',  # Use Cohere's best model for this task
+            prompt=prompt,
+            max_tokens=150,  # Limit response length
+            temperature=0.5
+        )
+
+        selectors = response.generations[0].text.strip()
+        if not selectors:
+            logger.error("No selectors identified by Cohere.")
             return None
-        selectors = result[0].tags  # Assuming Jina adds selectors to the tags field
-        logger.info(f"Selectors identified by Jina: {selectors}")
+        logger.info(f"Selectors identified by Cohere: {selectors}")
         return selectors
     except Exception as e:
-        logger.error(f"Error while identifying selectors with Jina: {e}")
+        logger.error(f"Error while identifying selectors with Cohere: {e}")
         return None
 
 def extract_reviews_with_playwright(url, selectors):
@@ -126,15 +119,24 @@ def extract_reviews_with_playwright(url, selectors):
 
     return reviews
 
-def process_reviews_with_jina(reviews):
+def process_reviews_with_cohere(reviews):
     try:
         review_texts = [f"{rev['title']} {rev['body']}" for rev in reviews]
-        logger.info("Sending reviews to Jina for processing.")
-        result = client.post("/ReviewProcessor", inputs=DocumentArray(review_texts))
-        logger.info("Reviews processed successfully with Jina.")
-        return result
+        logger.info("Sending reviews to Cohere for processing.")
+        
+        # Send the reviews to Cohere for processing
+        response = cohere_client.generate(
+            model='command-xlarge',
+            prompt="Process these reviews and provide a sentiment analysis summary:\n" + "\n".join(review_texts),
+            max_tokens=200,
+            temperature=0.5
+        )
+        
+        processed_reviews = response.generations[0].text.strip()
+        logger.info("Reviews processed successfully with Cohere.")
+        return processed_reviews
     except Exception as e:
-        logger.error(f"Error while processing reviews with Jina: {e}")
+        logger.error(f"Error while processing reviews with Cohere: {e}")
         return []
 
 @app.route('/', methods=['GET', 'POST'])
@@ -145,8 +147,8 @@ def home():
             return render_template('index.html', error="URL is required!")
 
         try:
-            # Identify selectors using Jina
-            selectors = identify_selectors_with_jina(url)
+            # Identify selectors using Cohere
+            selectors = identify_selectors_with_cohere(url)
             if not selectors:
                 return render_template('index.html', error="Could not identify selectors for the URL!")
 
@@ -155,10 +157,10 @@ def home():
             if not reviews:
                 return render_template('index.html', error="No reviews found!")
 
-            # Process reviews with Jina AI
-            processed_reviews = process_reviews_with_jina(reviews)
+            # Process reviews with Cohere AI
+            processed_reviews = process_reviews_with_cohere(reviews)
             if not processed_reviews:
-                return render_template('index.html', error="Error processing reviews with Jina.")
+                return render_template('index.html', error="Error processing reviews with Cohere.")
 
             return render_template('index.html', reviews=processed_reviews)
         except Exception as e:
