@@ -40,7 +40,7 @@ def identify_selectors_with_jina(url):
     try:
         logger.info(f"Sending URL to Jina for selector identification: {url}")
         result = client.post('/identify_selectors', inputs=[url])
-        if not result:
+        if not result or not result[0]:
             logger.error("No selectors identified by Jina.")
             return None
         selectors = result[0]  # Assuming Jina returns a dictionary with identified selectors
@@ -51,43 +51,48 @@ def identify_selectors_with_jina(url):
         return None
 
 def extract_reviews_with_playwright(url, selectors):
+    if not selectors:
+        logger.error("Selectors are empty or invalid.")
+        return []
+
+    reviews = []
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)  # Set headless=False for debugging
+        browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
-        reviews = []
         try:
             logger.info(f"Navigating to URL: {url}")
             page.goto(url, wait_until="domcontentloaded", timeout=60000)
             page.wait_for_load_state('networkidle')
 
-            # Wait for the review selector to load
-            page.wait_for_selector(selectors.get('review', 'div.review'), timeout=60000)
+            # Validate and use the review selector
+            review_selector = selectors.get('review', 'div.review')
+            if not page.query_selector(review_selector):
+                logger.warning(f"No elements found for the selector: {review_selector}")
+                return []
 
-            # Extract reviews from the page using dynamic selectors
-            review_elements = page.query_selector_all(selectors.get('review', 'div.review'))
+            # Extract review details
+            review_elements = page.query_selector_all(review_selector)
             for review in review_elements:
-                title = review.query_selector(selectors.get('title', '.review-title')).text_content().strip() if review.query_selector(selectors.get('title', '.review-title')) else "No title"
-                body = review.query_selector(selectors.get('body', '.review-body')).text_content().strip() if review.query_selector(selectors.get('body', '.review-body')) else "No body"
-                rating = review.query_selector(selectors.get('rating', '.review-rating')).text_content().strip() if review.query_selector(selectors.get('rating', '.review-rating')) else "No rating"
-                reviewer = review.query_selector(selectors.get('reviewer', '.reviewer-name')).text_content().strip() if review.query_selector(selectors.get('reviewer', '.reviewer-name')) else "Anonymous"
+                title = review.query_selector(selectors.get('title', '.review-title'))
+                body = review.query_selector(selectors.get('body', '.review-body'))
+                rating = review.query_selector(selectors.get('rating', '.review-rating'))
+                reviewer = review.query_selector(selectors.get('reviewer', '.reviewer-name'))
 
                 reviews.append({
-                    "title": title,
-                    "body": body,
-                    "rating": rating,
-                    "reviewer": reviewer
+                    "title": title.text_content().strip() if title else "No title",
+                    "body": body.text_content().strip() if body else "No body",
+                    "rating": rating.text_content().strip() if rating else "No rating",
+                    "reviewer": reviewer.text_content().strip() if reviewer else "Anonymous"
                 })
 
             logger.info(f"Extracted {len(reviews)} reviews.")
-        except TimeoutError:
-            logger.error(f"Timeout error while fetching reviews from {url}.")
         except Exception as e:
-            logger.error(f"Error while fetching reviews: {e}")
+            logger.error(f"Error while extracting reviews: {e}")
         finally:
             browser.close()
 
-        return reviews
+    return reviews
 
 def process_reviews_with_jina(reviews):
     try:
@@ -115,14 +120,15 @@ def home():
 
             # Extract reviews using Playwright with dynamic selectors
             reviews = extract_reviews_with_playwright(url, selectors)
-
             if not reviews:
                 return render_template('index.html', error="No reviews found!")
 
             # Process reviews with Jina AI
-            result = process_reviews_with_jina(reviews)
+            processed_reviews = process_reviews_with_jina(reviews)
+            if not processed_reviews:
+                return render_template('index.html', error="Error processing reviews with Jina.")
 
-            return render_template('index.html', reviews=result)
+            return render_template('index.html', reviews=processed_reviews)
         except Exception as e:
             logger.error(f"Error in processing: {e}")
             return render_template('index.html', error=f"Error: {str(e)}")
