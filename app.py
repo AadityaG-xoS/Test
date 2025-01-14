@@ -46,7 +46,7 @@ def identify_selectors_with_cohere(url):
             - Review rating
             - Reviewer name
 
-            The output should be a JSON-like dictionary no other text should be included in the output, keep it short and on-point.only return the structured json format. Example:
+            The output should be a JSON-like dictionary no other text should be included in the output, keep it short and on-point.only return structured json format also browser HTML for zyte should also be present. Example:
             {{
                 "review": ".col-12.col-sm-12.product-review",
                 "title": ".review-title",
