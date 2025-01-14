@@ -43,22 +43,22 @@ def identify_selectors_with_cohere(url):
             - Review rating
             - Reviewer name
 
-            The output should be a JSON-like dictionary.
+            The output should be a JSON-like dictionary. Example:
+            {{
+                "review": "review",
+                "title": ".review-title",
+                "body": ".review-body",
+                "rating": ".review-rating",
+                "reviewer": ".reviewer-name"
+            }}
             """,
-            preamble="You are an AI-assistant chatbot. Provide thorough responses.",
+            preamble="You are an AI-assistant chatbot. You are trained to assist users by providing thorough and helpful responses to their queries.",
         )
 
-        # Validate the response
-        if not response.text.strip():
-            raise ValueError("Empty response from Cohere.")
-
-        # Attempt to parse as JSON-like dictionary
-        selectors = json.loads(response.text.strip())
-        if not isinstance(selectors, dict):
-            raise ValueError("Cohere response is not a valid dictionary.")
-
+        # Extract the reply text from the response object
+        selectors = response.text.strip()
         logger.info(f"Selectors identified by Cohere: {selectors}")
-        return selectors
+        return eval(selectors)  # Convert the string to a Python dictionary
     except Exception as e:
         logger.error(f"Error identifying selectors with Cohere: {e}")
         return None
