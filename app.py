@@ -59,7 +59,7 @@ def identify_selectors_with_cohere(url):
         selectors = response.text.strip()
         logger.info(f"Selectors identified by Cohere: {selectors}")
 
-        # Convert the string response into a dictionary
+        # Convert the string response into a dictionary (handle the case of single quotes)
         selectors_dict = json.loads(selectors.replace("'", '"'))  # Convert single quotes to double quotes for valid JSON
         logger.info(f"Selectors as a dictionary: {selectors_dict}")
 
@@ -114,30 +114,23 @@ def process_reviews_with_cohere(reviews):
     try:
         if not reviews:
             raise ValueError("No reviews to process.")
-
-        review_texts = [f"{rev['title']} {rev['body']}" for rev in reviews]
-        logger.info("Processing reviews with Cohere AI.")
-
-        prompt = """
-        Perform a sentiment analysis on the following reviews and summarize the results:
-        """ + "\n".join(review_texts)
-
-        response = cohere_client.generate(
-            model='command-r-plus',
-            prompt=prompt,
-            max_tokens=300,
-            temperature=0.5
-        )
-
-        if not response.generations:
-            raise ValueError("No generations returned from Cohere.")
-
-        processed_reviews = response.generations[0].text.strip()
-        logger.info("Reviews processed successfully with Cohere.")
+        
+        processed_reviews = []
+        for review in reviews:
+            # Example processing: Add a prefix to each review title (customize as per your need)
+            processed_review = {
+                "title": f"Processed: {review['title']}",
+                "body": review['body'],
+                "rating": review['rating'],
+                "reviewer": review['reviewer']
+            }
+            processed_reviews.append(processed_review)
+        
+        logger.info(f"Processed {len(processed_reviews)} reviews.")
         return processed_reviews
     except Exception as e:
         logger.error(f"Error processing reviews with Cohere: {e}")
-        return "Error processing reviews."
+        return []
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
@@ -151,6 +144,8 @@ def home():
             selectors = identify_selectors_with_cohere(url)
             if not selectors:
                 return render_template('index.html', error="Could not identify selectors for the URL!")
+
+            logger.info(f"Selectors passed to Zyte: {selectors}")
 
             # Extract reviews using Zyte
             reviews = extract_reviews_with_zyte(url, selectors)
@@ -167,7 +162,5 @@ def home():
             logger.error(f"Error processing: {e}")
             return render_template('index.html', error=f"Error: {str(e)}")
 
-    return render_template('index.html')
-
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=True)
+    app.run(debug=True)
