@@ -166,36 +166,44 @@ def process_reviews_with_cohere(reviews):
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
+    reviews = []  # Initialize reviews as an empty list by default
+    error_message = None  # Variable to store any error message
+    
     if request.method == 'POST':
         url = request.form.get('url')
         if not url:
-            return render_template('index.html', error="URL is required!")
+            error_message = "URL is required!"
+            return render_template('index.html', reviews=reviews, error=error_message)
 
         try:
             # Identify selectors using Cohere
             selectors = identify_selectors_with_cohere(url)
             if not selectors:
-                return render_template('index.html', error="Could not identify selectors for the URL!")
+                error_message = "Could not identify selectors for the URL!"
+                return render_template('index.html', reviews=reviews, error=error_message)
 
             logger.info(f"Selectors passed to Zyte: {selectors}")
 
             # Extract reviews using Zyte
             reviews = extract_reviews_with_zyte(url, selectors)
             if not reviews:
-                return render_template('index.html', error="No reviews found!")
+                error_message = "No reviews found!"
+                return render_template('index.html', reviews=reviews, error=error_message)
 
             # Process reviews with Cohere AI
-            processed_reviews = process_reviews_with_cohere(reviews)
-            if not processed_reviews:
-                return render_template('index.html', error="Error processing reviews with Cohere.")
+            reviews = process_reviews_with_cohere(reviews)
+            if not reviews:
+                error_message = "Error processing reviews with Cohere."
+                return render_template('index.html', reviews=reviews, error=error_message)
 
-            return render_template('index.html', reviews=processed_reviews)
+            return render_template('index.html', reviews=reviews)
         except Exception as e:
             logger.error(f"Error processing: {e}")
-            return render_template('index.html', error=f"Error: {str(e)}")
-    
+            error_message = f"Error: {str(e)}"
+            return render_template('index.html', reviews=reviews, error=error_message)
+
     # Render the home page on GET request
-    return render_template('index.html', reviews)
+    return render_template('index.html', reviews=reviews)
 
 if __name__ == '__main__':
      app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)
