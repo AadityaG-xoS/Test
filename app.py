@@ -123,10 +123,10 @@ def extract_reviews_with_zyte(url, selectors):
                 break
 
             for review in review_elements:
-                title = review.css(selectors.get('title').strip()
-                body = review.css(selectors.get('body').strip()
-                rating = review.css(selectors.get('rating').strip()
-                reviewer = review.css(selectors.get('reviewer')).strip()
+                title = review.css(selectors.get('title').strip())
+                body = review.css(selectors.get('body').strip())
+                rating = review.css(selectors.get('rating').strip())
+                reviewer = review.css(selectors.get('reviewer').strip())
 
                 reviews.append({
                     "title": title,
