@@ -32,7 +32,7 @@ app = Flask(__name__)
 def identify_selectors_with_cohere(url):
     try:
         logger.info(f"Sending URL to Cohere for selector identification: {url}")
-
+        
         response = cohere_client.chat(
             model="command-r-plus",
             message=f"""
@@ -161,6 +161,9 @@ def home():
         except Exception as e:
             logger.error(f"Error processing: {e}")
             return render_template('index.html', error=f"Error: {str(e)}")
+    
+    # Render the home page on GET request
+    return render_template('index.html', reviews=None)
 
 if __name__ == '__main__':
     app.run(debug=True)
