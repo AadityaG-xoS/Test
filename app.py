@@ -100,7 +100,7 @@ def extract_reviews_with_zyte(url, selectors):
         with open("http_response_body.html", "wb") as fp:
             fp.write(http_response_body)
 
-        browser_html = response.json().get("browserHtml", "")
+        browser_html = response.json().get("browserHtml", None )
         if not browser_html:
             logger.error("No browser HTML found in the response.")
             return []
@@ -189,7 +189,7 @@ def home():
             return render_template('index.html', error=f"Error: {str(e)}")
     
     # Render the home page on GET request
-    return render_template('index.html', reviews=None)
+    return render_template('index.html', reviews)
 
 if __name__ == '__main__':
      app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)
