@@ -8,6 +8,7 @@ import requests
 from scrapy.http import HtmlResponse
 from zyte_api import ZyteAPI
 from base64 import b64decode
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -76,67 +77,72 @@ def identify_selectors_with_cohere(url):
 
 def extract_reviews_with_zyte(url, selectors):
     try:
-        # Ensure selectors are a dictionary
         if not isinstance(selectors, dict):
             raise ValueError("Selectors should be a valid dictionary.")
 
-        logger.info(f"Fetching URL with Zyte: {url}")
-        # Use Zyte API to fetch browser-rendered HTML
-        response = requests.post(
-            "https://api.zyte.com/v1/extract",
-            auth=(zyte_api_key, ""),  # Use your Zyte API key
-            json={
-                "url": url,
-                "httpResponseBody": True,
-            },
-        )
-        
-        if response.status_code != 200:
-            logger.error(f"Failed to fetch the page with Zyte. Status: {response.status_code}")
-            return []
-
-        # Check for httpResponseBody
-        if "httpResponseBody" not in response.json():
-            logger.error("No httpResponseBody found in Zyte response.")
-            return []
-
-        # Decode and save the HTML response body for debugging
-        http_response_body = b64decode(response.json()["httpResponseBody"])
-        with open("http_response_body.html", "wb") as fp:
-            fp.write(http_response_body)
-
-        # Check if "browserHtml" is in the response
-        browser_html = response.json().get("browserHtml", None)
-        if not browser_html:
-            logger.error("No browser HTML found in the response.")
-            return []
-
-        # Save the browser-rendered HTML for debugging
-        with open("browser_html.html", "w", encoding="utf-8") as fp:
-            fp.write(browser_html)
-        logger.info("Saved browser-rendered HTML to browser_html.html for debugging.")
-
-        # Use Scrapy's HtmlResponse for extraction
-        scrapy_response = HtmlResponse(url=url, body=browser_html, encoding='utf-8')
-
         reviews = []
-        review_elements = scrapy_response.css(selectors.get('review', '.review'))
-        logger.debug(f"Review elements found: {len(review_elements)}")
+        page_number = 1
+        while True:
+            logger.info(f"Fetching page {page_number} with Zyte: {url}?page={page_number}")
+            # Use Zyte API to fetch browser-rendered HTML
+            response = requests.post(
+                "https://api.zyte.com/v1/extract",
+                auth=(zyte_api_key, ""),
+                json={
+                    "url": f"{url}?page={page_number}",  # Handle pagination by appending page number
+                    "httpResponseBody": True,
+                },
+            )
 
-        for review in review_elements:
-            title = review.css(selectors.get('title', '.review-title::text')).get(default="No title").strip()
-            body = review.css(selectors.get('body', '.review-body::text')).get(default="No body").strip()
-            rating = review.css(selectors.get('rating', '.review-rating::text')).get(default="No rating").strip()
-            reviewer = review.css(selectors.get('reviewer', '.reviewer-name::text')).get(default="Anonymous").strip()
+            if response.status_code != 200:
+                logger.error(f"Failed to fetch the page with Zyte. Status: {response.status_code}")
+                break
 
-            reviews.append({
-                "title": title,
-                "body": body,
-                "rating": rating,
-                "reviewer": reviewer
-            })
+            if "httpResponseBody" not in response.json():
+                logger.error("No httpResponseBody found in Zyte response.")
+                break
 
-        logger.info(f"Extracted {len(reviews)} reviews.")
+            http_response_body = b64decode(response.json()["httpResponseBody"])
+            with open(f"page_{page_number}_response_body.html", "wb") as fp:
+                fp.write(http_response_body)
+
+            browser_html = response.json().get("browserHtml", None)
+            if not browser_html:
+                logger.error(f"No browser HTML found on page {page_number}. Ending pagination.")
+                break
+
+            with open(f"page_{page_number}_browser_html.html", "w", encoding="utf-8") as fp:
+                fp.write(browser_html)
+            logger.info(f"Saved browser-rendered HTML for page {page_number}.")
+            
+            # Use Scrapy's HtmlResponse for extraction
+            scrapy_response = HtmlResponse(url=f"{url}?page={page_number}", body=browser_html, encoding='utf-8')
+
+            review_elements = scrapy_response.css(selectors.get('review', '.review'))
+            logger.debug(f"Review elements found on page {page_number}: {len(review_elements)}")
+
+            if not review_elements:
+                logger.info("No more reviews found, stopping pagination.")
+                break
+
+            for review in review_elements:
+                title = review.css(selectors.get('title', '.review-title::text')).get(default="No title").strip()
+                body = review.css(selectors.get('body', '.review-body::text')).get(default="No body").strip()
+                rating = review.css(selectors.get('rating', '.review-rating::text')).get(default="No rating").strip()
+                reviewer = review.css(selectors.get('reviewer', '.reviewer-name::text')).get(default="Anonymous").strip()
+
+                reviews.append({
+                    "title": title,
+                    "body": body,
+                    "rating": rating,
+                    "reviewer": reviewer
+                })
+
+            # Handle pagination logic: Add a small delay to avoid overloading the server
+            time.sleep(2)
+            page_number += 1
+
+        logger.info(f"Extracted {len(reviews)} reviews across {page_number-1} pages.")
         return reviews
     except Exception as e:
         logger.error(f"Error extracting reviews with Zyte: {e}")
@@ -149,7 +155,6 @@ def process_reviews_with_cohere(reviews):
         
         processed_reviews = []
         for review in reviews:
-            # Example processing: Add a prefix to each review title (customize as per your need)
             processed_review = {
                 "title": f"Processed: {review['title']}",
                 "body": review['body'],
@@ -202,7 +207,6 @@ def home():
             error_message = f"Error: {str(e)}"
             return render_template('index.html', reviews=reviews, error=error_message)
 
-    # Render the home page on GET request
     return render_template('index.html', reviews=reviews)
 
 if __name__ == '__main__':
