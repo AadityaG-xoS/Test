@@ -55,17 +55,19 @@ def identify_selectors_with_cohere(url):
             preamble="You are an AI-assistant chatbot. You are trained to assist users by providing thorough and helpful responses to their queries.",
         )
 
-        # Safely parse the response as JSON
+        # Extract the response text and evaluate it
         selectors = response.text.strip()
         logger.info(f"Selectors identified by Cohere: {selectors}")
 
-        try:
-            # Convert the response to a dictionary using JSON
-            return json.loads(selectors)
-        except json.JSONDecodeError as e:
-            logger.error(f"Error decoding JSON response from Cohere: {e}")
-            return None
+        # Convert the string response into a dictionary
+        selectors_dict = json.loads(selectors.replace("'", '"'))  # Convert single quotes to double quotes for valid JSON
+        logger.info(f"Selectors as a dictionary: {selectors_dict}")
 
+        # Check if it's a valid dictionary
+        if not isinstance(selectors_dict, dict):
+            raise ValueError("Selectors response is not a valid dictionary.")
+
+        return selectors_dict
     except Exception as e:
         logger.error(f"Error identifying selectors with Cohere: {e}")
         return None
