@@ -43,7 +43,7 @@ def identify_selectors_with_cohere(url):
 
         The output should be a JSON-like dictionary. Example:
         {
-            "review": "div.review",
+            "review": "review",
             "title": ".review-title",
             "body": ".review-body",
             "rating": ".review-rating",
