@@ -55,10 +55,17 @@ def identify_selectors_with_cohere(url):
             preamble="You are an AI-assistant chatbot. You are trained to assist users by providing thorough and helpful responses to their queries.",
         )
 
-        # Extract the reply text from the response object
+        # Safely parse the response as JSON
         selectors = response.text.strip()
         logger.info(f"Selectors identified by Cohere: {selectors}")
-        return eval(selectors)  # Convert the string to a Python dictionary
+
+        try:
+            # Convert the response to a dictionary using JSON
+            return json.loads(selectors)
+        except json.JSONDecodeError as e:
+            logger.error(f"Error decoding JSON response from Cohere: {e}")
+            return None
+
     except Exception as e:
         logger.error(f"Error identifying selectors with Cohere: {e}")
         return None
@@ -70,6 +77,8 @@ def extract_reviews_with_zyte(url, selectors):
 
         logger.info(f"Fetching URL with Zyte: {url}")
         response = zyte_client.get(url)
+        
+        # Ensure we check if the response status is valid
         if response.status_code != 200:
             logger.error(f"Failed to fetch the page with Zyte. Status: {response.status_code}")
             return []
@@ -159,4 +168,3 @@ def home():
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=True)
-
