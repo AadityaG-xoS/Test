@@ -17,26 +17,24 @@
     
     <!-- Display error message if there's an issue -->
     {% if error %}
-        <div style="color: red; margin-top: 20px;">
-            <strong>Error:</strong> {{ error }}
-        </div>
+    <div style="color: red;">
+        <strong>Error:</strong> {{ error }}
+    </div>
     {% endif %}
-
+    
     <!-- Display reviews after processing -->
     {% if reviews %}
-        <div style="margin-top: 20px;">
-            <h2>Processed Reviews</h2>
-            <ul>
-                {% for review in reviews %}
-                    <li>
-                        <h3>{{ review['title'] }}</h3>
-                        <p><strong>Rating:</strong> {{ review['rating'] }}</p>
-                        <p><strong>Reviewer:</strong> {{ review['reviewer'] }}</p>
-                        <p>{{ review['body'] }}</p>
-                    </li>
-                {% endfor %}
-            </ul>
-        </div>
+    <h2>Scraped Reviews:</h2>
+    <ul>
+        {% for review in reviews %}
+        <li>
+            <strong>Title:</strong> {{ review.title }}<br>
+            <strong>Body:</strong> {{ review.body }}<br>
+            <strong>Rating:</strong> {{ review.rating }}<br>
+            <strong>Reviewer:</strong> {{ review.reviewer }}
+        </li>
+        {% endfor %}
+    </ul>
     {% endif %}
 </body>
 </html>
