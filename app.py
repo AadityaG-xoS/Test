@@ -95,12 +95,18 @@ def extract_reviews_with_zyte(url, selectors):
             logger.error(f"Failed to fetch the page with Zyte. Status: {response.status_code}")
             return []
 
+        # Check for httpResponseBody
+        if "httpResponseBody" not in response.json():
+            logger.error("No httpResponseBody found in Zyte response.")
+            return []
+
         # Decode and save the HTML response body for debugging
         http_response_body = b64decode(response.json()["httpResponseBody"])
         with open("http_response_body.html", "wb") as fp:
             fp.write(http_response_body)
 
-        browser_html = response.json().get("browserHtml", None )
+        # Check if "browserHtml" is in the response
+        browser_html = response.json().get("browserHtml", None)
         if not browser_html:
             logger.error("No browser HTML found in the response.")
             return []
