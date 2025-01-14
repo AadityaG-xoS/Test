@@ -108,8 +108,10 @@ def extract_reviews_with_zyte(url, selectors):
 
             browser_html = response.json().get("browserHtml", None)
             if not browser_html:
-                logger.error(f"No browser HTML found on page {page_number}. Ending pagination.")
-                break
+                logger.warning(f"No browser HTML found on page {page_number}. Attempting to retry...")
+                # Try to fetch the page again to ensure browser HTML is found
+                time.sleep(2)
+                continue  # Retry fetching the page
 
             with open(f"page_{page_number}_browser_html.html", "w", encoding="utf-8") as fp:
                 fp.write(browser_html)
@@ -210,4 +212,4 @@ def home():
     return render_template('index.html', reviews=reviews)
 
 if __name__ == '__main__':
-     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)
