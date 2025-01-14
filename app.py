@@ -74,13 +74,12 @@ def identify_selectors_with_cohere(url):
 
 def extract_reviews_with_zyte(url, selectors):
     try:
+        # Ensure selectors are a dictionary
         if not isinstance(selectors, dict):
             raise ValueError("Selectors should be a valid dictionary.")
 
         logger.info(f"Fetching URL with Zyte: {url}")
         response = zyte_client.get(url)
-        
-        # Ensure we check if the response status is valid
         if response.status_code != 200:
             logger.error(f"Failed to fetch the page with Zyte. Status: {response.status_code}")
             return []
@@ -90,6 +89,8 @@ def extract_reviews_with_zyte(url, selectors):
 
         # Extract reviews based on selectors
         review_elements = scrapy_response.css(selectors.get('review', 'div.review'))
+        logger.debug(f"Review elements found: {review_elements}")
+
         for review in review_elements:
             title = review.css(selectors.get('title', '.review-title::text')).get(default="No title").strip()
             body = review.css(selectors.get('body', '.review-body::text')).get(default="No body").strip()
