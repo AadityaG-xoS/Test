@@ -4,6 +4,7 @@ import json
 from flask import Flask, request, jsonify, render_template
 import cohere
 import logging
+import requests
 from scrapy.http import HtmlResponse
 from zyte_api import ZyteAPI
 
@@ -79,15 +80,29 @@ def extract_reviews_with_zyte(url, selectors):
             raise ValueError("Selectors should be a valid dictionary.")
 
         logger.info(f"Fetching URL with Zyte: {url}")
-        response = zyte_client.get(url)
+        # Use Zyte API to fetch browser-rendered HTML
+        response = requests.post(
+            "https://api.zyte.com/v1/extract",
+            auth=(zyte_api_key, ""),  # Use your Zyte API key
+            json={
+                "url": url,
+                "browserHtml": True,
+            },
+        )
         if response.status_code != 200:
             logger.error(f"Failed to fetch the page with Zyte. Status: {response.status_code}")
             return []
 
-        reviews = []
-        scrapy_response = HtmlResponse(url=url, body=response.content, encoding='utf-8')
+        # Save the browser-rendered HTML for debugging
+        browser_html = response.json().get("browserHtml", "")
+        with open("browser_html.html", "w", encoding="utf-8") as fp:
+            fp.write(browser_html)
+        logger.info("Saved browser-rendered HTML to browser_html.html for debugging.")
 
-        # Extract reviews based on selectors
+        # Use Scrapy's HtmlResponse for extraction
+        scrapy_response = HtmlResponse(url=url, body=browser_html, encoding='utf-8')
+
+        reviews = []
         review_elements = scrapy_response.css(selectors.get('review', 'div.review'))
         logger.debug(f"Review elements found: {review_elements}")
 
