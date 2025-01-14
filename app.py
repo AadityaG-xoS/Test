@@ -3,7 +3,6 @@ import os
 from flask import Flask, request, jsonify, render_template
 import cohere
 import logging
-from zyte_api import ZyteAPIClient
 from scrapy.http import HtmlResponse
 from zyte_api import ZyteAPI
 
@@ -26,7 +25,7 @@ if not client:
 cohere_client = cohere.Client(cohere_api_key)
 
 # Initialize Zyte client
-zyte_client = ZyteAPIClient(api_key=client)
+zyte_client = ZyteAPI(api_key=client)
 
 app = Flask(__name__)
 
