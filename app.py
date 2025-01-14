@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+import json
 from flask import Flask, request, jsonify, render_template
 import cohere
 import logging
@@ -42,38 +43,38 @@ def identify_selectors_with_cohere(url):
             - Review rating
             - Reviewer name
 
-            The output should be a JSON-like dictionary. Example:
-            {{
-                "review": "review",
-                "title": ".review-title",
-                "body": ".review-body",
-                "rating": ".review-rating",
-                "reviewer": ".reviewer-name"
-            }}
+            The output should be a JSON-like dictionary.
             """,
-            preamble="You are an AI-assistant chatbot. You are trained to assist users by providing thorough and helpful responses to their queries.",
+            preamble="You are an AI-assistant chatbot. Provide thorough responses.",
         )
 
-        # Extract the reply text from the response object
-        selectors = response.text.strip()
+        # Validate the response
+        if not response.text.strip():
+            raise ValueError("Empty response from Cohere.")
+
+        # Attempt to parse as JSON-like dictionary
+        selectors = json.loads(response.text.strip())
+        if not isinstance(selectors, dict):
+            raise ValueError("Cohere response is not a valid dictionary.")
+
         logger.info(f"Selectors identified by Cohere: {selectors}")
-        return eval(selectors)  # Convert the string to a Python dictionary
+        return selectors
     except Exception as e:
         logger.error(f"Error identifying selectors with Cohere: {e}")
         return None
 
-
 def extract_reviews_with_zyte(url, selectors):
     try:
+        if not isinstance(selectors, dict):
+            raise ValueError("Selectors should be a valid dictionary.")
+
         logger.info(f"Fetching URL with Zyte: {url}")
         response = zyte_client.get(url)
-        reviews = []
-
         if response.status_code != 200:
             logger.error(f"Failed to fetch the page with Zyte. Status: {response.status_code}")
-            return reviews
+            return []
 
-        # Parse the HTML response
+        reviews = []
         scrapy_response = HtmlResponse(url=url, body=response.content, encoding='utf-8')
 
         # Extract reviews based on selectors
@@ -99,6 +100,9 @@ def extract_reviews_with_zyte(url, selectors):
 
 def process_reviews_with_cohere(reviews):
     try:
+        if not reviews:
+            raise ValueError("No reviews to process.")
+
         review_texts = [f"{rev['title']} {rev['body']}" for rev in reviews]
         logger.info("Processing reviews with Cohere AI.")
 
@@ -112,6 +116,9 @@ def process_reviews_with_cohere(reviews):
             max_tokens=300,
             temperature=0.5
         )
+
+        if not response.generations:
+            raise ValueError("No generations returned from Cohere.")
 
         processed_reviews = response.generations[0].text.strip()
         logger.info("Reviews processed successfully with Cohere.")
@@ -152,3 +159,4 @@ def home():
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=True)
+
