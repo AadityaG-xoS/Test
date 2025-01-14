@@ -82,7 +82,9 @@ def extract_reviews_with_zyte(url, selectors):
 
         reviews = []
         page_number = 1
-        while True:
+        retry_limit = 3  # Retry up to 3 times if browserHtml is missing
+
+        while page_number <= retry_limit:
             logger.info(f"Fetching page {page_number} with Zyte: {url}?page={page_number}")
             # Use Zyte API to fetch browser-rendered HTML
             response = requests.post(
@@ -108,15 +110,17 @@ def extract_reviews_with_zyte(url, selectors):
 
             browser_html = response.json().get("browserHtml", None)
             if not browser_html:
-                logger.warning(f"No browser HTML found on page {page_number}. Attempting to retry...")
-                # Try to fetch the page again to ensure browser HTML is found
+                logger.warning(f"No browser HTML found on page {page_number}. Retrying...")
+                # Retry logic in case browser HTML is missing
                 time.sleep(2)
+                page_number += 1
                 continue  # Retry fetching the page
 
+            # Save the browser HTML to a file for debugging
             with open(f"page_{page_number}_browser_html.html", "w", encoding="utf-8") as fp:
                 fp.write(browser_html)
             logger.info(f"Saved browser-rendered HTML for page {page_number}.")
-            
+
             # Use Scrapy's HtmlResponse for extraction
             scrapy_response = HtmlResponse(url=f"{url}?page={page_number}", body=browser_html, encoding='utf-8')
 
@@ -140,11 +144,11 @@ def extract_reviews_with_zyte(url, selectors):
                     "reviewer": reviewer
                 })
 
-            # Handle pagination logic: Add a small delay to avoid overloading the server
+            # Delay to avoid overloading the server (polite scraping)
             time.sleep(2)
-            page_number += 1
+            break  # Exit the loop after processing one page
 
-        logger.info(f"Extracted {len(reviews)} reviews across {page_number-1} pages.")
+        logger.info(f"Extracted {len(reviews)} reviews across {page_number} pages.")
         return reviews
     except Exception as e:
         logger.error(f"Error extracting reviews with Zyte: {e}")
