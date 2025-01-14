@@ -33,6 +33,7 @@ def identify_selectors_with_cohere(url):
         logger.info(f"Sending URL to Cohere for selector identification: {url}")
 
         response = cohere_client.chat(
+            model="command-r-plus",
             message=f"""
             Analyze the webpage at {url} and provide CSS selectors for extracting the following elements:
             - Review container
@@ -50,16 +51,17 @@ def identify_selectors_with_cohere(url):
                 "reviewer": ".reviewer-name"
             }}
             """,
-            model="command-r-plus",
-            preamble="You are an AI-assistant chatbot. You are trained to assist users by providing thorough and helpful responses to their queries."
+            preamble="You are an AI-assistant chatbot. You are trained to assist users by providing thorough and helpful responses to their queries.",
         )
 
-        selectors = response.reply.strip()
+        # Extract the reply text from the response object
+        selectors = response.text.strip()
         logger.info(f"Selectors identified by Cohere: {selectors}")
-        return eval(selectors)
+        return eval(selectors)  # Convert the string to a Python dictionary
     except Exception as e:
         logger.error(f"Error identifying selectors with Cohere: {e}")
         return None
+
 
 def extract_reviews_with_zyte(url, selectors):
     try:
