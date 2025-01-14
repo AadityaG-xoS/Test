@@ -6,7 +6,6 @@ import logging
 from scrapy.http import HtmlResponse
 from zyte_api import ZyteAPI
 
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -14,18 +13,18 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 cohere_api_key = os.getenv("COHERE_API_KEY")
-client = ZyteAPI(api_key="ZYTE_API_KEY")
+zyte_api_key = os.getenv("ZYTE_API_KEY")
 
 if not cohere_api_key:
     raise EnvironmentError("COHERE_API_KEY environment variable is not set.")
-if not client:
+if not zyte_api_key:
     raise EnvironmentError("ZYTE_API_KEY environment variable is not set.")
 
 # Initialize Cohere client
 cohere_client = cohere.Client(cohere_api_key)
 
 # Initialize Zyte client
-zyte_client = ZyteAPI(api_key=client)
+zyte_client = ZyteAPI(api_key=zyte_api_key)
 
 app = Flask(__name__)
 
@@ -33,32 +32,29 @@ def identify_selectors_with_cohere(url):
     try:
         logger.info(f"Sending URL to Cohere for selector identification: {url}")
 
-        prompt = f"""
-        Analyze the webpage at {url} and provide CSS selectors for extracting the following elements:
-        - Review container
-        - Review title
-        - Review body
-        - Review rating
-        - Reviewer name
+        response = cohere_client.chat(
+            message=f"""
+            Analyze the webpage at {url} and provide CSS selectors for extracting the following elements:
+            - Review container
+            - Review title
+            - Review body
+            - Review rating
+            - Reviewer name
 
-        The output should be a JSON-like dictionary. Example:
-        {{
-            "review": "review",
-            "title": ".review-title",
-            "body": ".review-body",
-            "rating": ".review-rating",
-            "reviewer": ".reviewer-name"
-        }}
-        """
-
-        response = cohere_client.generate(
-            model='command-xlarge',
-            prompt=prompt,
-            max_tokens=200,
-            temperature=0.5
+            The output should be a JSON-like dictionary. Example:
+            {{
+                "review": "review",
+                "title": ".review-title",
+                "body": ".review-body",
+                "rating": ".review-rating",
+                "reviewer": ".reviewer-name"
+            }}
+            """,
+            model="command-r-plus",
+            preamble="You are an AI-assistant chatbot. You are trained to assist users by providing thorough and helpful responses to their queries."
         )
 
-        selectors = response.generations[0].text.strip()
+        selectors = response.reply.strip()
         logger.info(f"Selectors identified by Cohere: {selectors}")
         return eval(selectors)
     except Exception as e:
@@ -109,7 +105,7 @@ def process_reviews_with_cohere(reviews):
         """ + "\n".join(review_texts)
 
         response = cohere_client.generate(
-            model='command-xlarge',
+            model='command-r-plus',
             prompt=prompt,
             max_tokens=300,
             temperature=0.5
