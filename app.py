@@ -5,6 +5,8 @@ import cohere
 import logging
 from zyte_api import ZyteAPIClient
 from scrapy.http import HtmlResponse
+from zyte_api import ZyteAPI
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -13,18 +15,18 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 cohere_api_key = os.getenv("COHERE_API_KEY")
-zyte_api_key = os.getenv("ZYTE_API_KEY")
+client = ZyteAPI(api_key="ZYTE_API_KEY")
 
 if not cohere_api_key:
     raise EnvironmentError("COHERE_API_KEY environment variable is not set.")
-if not zyte_api_key:
+if not client:
     raise EnvironmentError("ZYTE_API_KEY environment variable is not set.")
 
 # Initialize Cohere client
 cohere_client = cohere.Client(cohere_api_key)
 
 # Initialize Zyte client
-zyte_client = ZyteAPIClient(api_key=zyte_api_key)
+zyte_client = ZyteAPIClient(api_key=client)
 
 app = Flask(__name__)
 
