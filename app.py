@@ -7,6 +7,7 @@ import logging
 import requests
 from scrapy.http import HtmlResponse
 from zyte_api import ZyteAPI
+from base64 import b64decode
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -53,7 +54,7 @@ def identify_selectors_with_cohere(url):
                 "reviewer": ".reviewer-name"
             }}
             """,
-            preamble="You are an AI-assistant chatbot. You are trained to assist users by providing thorough and helpful responses to their queries.",
+            preamble="You are an AI-assistant chatbot and master of web scraping. You are trained to assist users by providing thorough and helpful responses to their queries.",
         )
 
         # Extract the response text and evaluate it
@@ -86,9 +87,13 @@ def extract_reviews_with_zyte(url, selectors):
             auth=(zyte_api_key, ""),  # Use your Zyte API key
             json={
                 "url": url,
-                "browserHtml": True,
+                "httpResponseBody": True,
             },
         )
+        http_response_body: bytes = b64decode(
+          response.json()["httpResponseBody"])
+        with open("http_response_body.html", "wb") as fp:
+           fp.write(http_response_body)
         if response.status_code != 200:
             logger.error(f"Failed to fetch the page with Zyte. Status: {response.status_code}")
             return []
