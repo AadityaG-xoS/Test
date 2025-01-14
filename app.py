@@ -46,13 +46,13 @@ def identify_selectors_with_cohere(url):
             - Review rating
             - Reviewer name
 
-            The output should be a JSON-like dictionary no other text should be included in the output, keep it short and on-point.only return the structed json format. Example:
+            The output should be a JSON-like dictionary no other text should be included in the output, keep it short and on-point.only return the structured json format. Example:
             {{
-                "review": "review",
+                "review": ".col-12.col-sm-12.product-review",
                 "title": ".review-title",
                 "body": ".review-body",
                 "rating": ".review-rating",
-                "reviewer": ".reviewer-name"
+                "reviewer": ".reviewer"
             }}
             """,
             preamble="You are an AI-assistant chatbot and master of web scraping. You are trained to assist users by providing thorough and helpful responses to their queries.",
@@ -82,9 +82,9 @@ def extract_reviews_with_zyte(url, selectors):
 
         reviews = []
         page_number = 1
-        retry_limit = 3  # Retry up to 3 times if browserHtml is missing
+        retry_limit = 5  # Retry up to 5 times if browserHtml is missing
 
-        while page_number <= retry_limit:
+        for _ in range(retry_limit):
             logger.info(f"Fetching page {page_number} with Zyte: {url}?page={page_number}")
             # Use Zyte API to fetch browser-rendered HTML
             response = requests.post(
@@ -100,21 +100,12 @@ def extract_reviews_with_zyte(url, selectors):
                 logger.error(f"Failed to fetch the page with Zyte. Status: {response.status_code}")
                 break
 
-            if "httpResponseBody" not in response.json():
-                logger.error("No httpResponseBody found in Zyte response.")
-                break
-
-            http_response_body = b64decode(response.json()["httpResponseBody"])
-            with open(f"page_{page_number}_response_body.html", "wb") as fp:
-                fp.write(http_response_body)
-
-            browser_html = response.json().get("browserHtml", None)
+            response_json = response.json()
+            browser_html = response_json.get("browserHtml", None)
             if not browser_html:
                 logger.warning(f"No browser HTML found on page {page_number}. Retrying...")
-                # Retry logic in case browser HTML is missing
-                time.sleep(2)
-                page_number += 1
-                continue  # Retry fetching the page
+                time.sleep(2)  # Adjust delay as needed to allow for content to load
+                continue
 
             # Save the browser HTML to a file for debugging
             with open(f"page_{page_number}_browser_html.html", "w", encoding="utf-8") as fp:
@@ -124,7 +115,7 @@ def extract_reviews_with_zyte(url, selectors):
             # Use Scrapy's HtmlResponse for extraction
             scrapy_response = HtmlResponse(url=f"{url}?page={page_number}", body=browser_html, encoding='utf-8')
 
-            review_elements = scrapy_response.css(selectors.get('review', '.review'))
+            review_elements = scrapy_response.css(selectors.get('review'))
             logger.debug(f"Review elements found on page {page_number}: {len(review_elements)}")
 
             if not review_elements:
@@ -132,10 +123,10 @@ def extract_reviews_with_zyte(url, selectors):
                 break
 
             for review in review_elements:
-                title = review.css(selectors.get('title', '.review-title::text')).get(default="No title").strip()
-                body = review.css(selectors.get('body', '.review-body::text')).get(default="No body").strip()
-                rating = review.css(selectors.get('rating', '.review-rating::text')).get(default="No rating").strip()
-                reviewer = review.css(selectors.get('reviewer', '.reviewer-name::text')).get(default="Anonymous").strip()
+                title = review.css(selectors.get('title').strip()
+                body = review.css(selectors.get('body').strip()
+                rating = review.css(selectors.get('rating').strip()
+                reviewer = review.css(selectors.get('reviewer')).strip()
 
                 reviews.append({
                     "title": title,
@@ -144,11 +135,11 @@ def extract_reviews_with_zyte(url, selectors):
                     "reviewer": reviewer
                 })
 
+            page_number += 1
             # Delay to avoid overloading the server (polite scraping)
             time.sleep(2)
-            break  # Exit the loop after processing one page
 
-        logger.info(f"Extracted {len(reviews)} reviews across {page_number} pages.")
+        logger.info(f"Extracted {len(reviews)} reviews across {page_number - 1} pages.")
         return reviews
     except Exception as e:
         logger.error(f"Error extracting reviews with Zyte: {e}")
