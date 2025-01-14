@@ -90,16 +90,22 @@ def extract_reviews_with_zyte(url, selectors):
                 "httpResponseBody": True,
             },
         )
-        http_response_body: bytes = b64decode(
-          response.json()["httpResponseBody"])
-        with open("http_response_body.html", "wb") as fp:
-           fp.write(http_response_body)
+        
         if response.status_code != 200:
             logger.error(f"Failed to fetch the page with Zyte. Status: {response.status_code}")
             return []
 
-        # Save the browser-rendered HTML for debugging
+        # Decode and save the HTML response body for debugging
+        http_response_body = b64decode(response.json()["httpResponseBody"])
+        with open("http_response_body.html", "wb") as fp:
+            fp.write(http_response_body)
+
         browser_html = response.json().get("browserHtml", "")
+        if not browser_html:
+            logger.error("No browser HTML found in the response.")
+            return []
+
+        # Save the browser-rendered HTML for debugging
         with open("browser_html.html", "w", encoding="utf-8") as fp:
             fp.write(browser_html)
         logger.info("Saved browser-rendered HTML to browser_html.html for debugging.")
@@ -108,8 +114,8 @@ def extract_reviews_with_zyte(url, selectors):
         scrapy_response = HtmlResponse(url=url, body=browser_html, encoding='utf-8')
 
         reviews = []
-        review_elements = scrapy_response.css(selectors.get('review', 'div.review'))
-        logger.debug(f"Review elements found: {review_elements}")
+        review_elements = scrapy_response.css(selectors.get('review', '.review'))
+        logger.debug(f"Review elements found: {len(review_elements)}")
 
         for review in review_elements:
             title = review.css(selectors.get('title', '.review-title::text')).get(default="No title").strip()
