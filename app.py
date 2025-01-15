@@ -46,7 +46,7 @@ def identify_selectors_with_cohere(url):
             - Review rating
             - Reviewer name
 
-            The output should be a JSON-like dictionary. Only return structured JSON format. Example:
+            The output should be a JSON-like dictionary. Only return structured JSON format znd no other text in output. Example:
             {{
                 "review": ".col-12.col-sm-12.product-review",
                 "title": ".review-title",
