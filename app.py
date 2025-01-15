@@ -31,7 +31,7 @@ zyte_client = ZyteAPI(api_key=zyte_api_key)
 
 app = Flask(__name__)
 
-ddef identify_selectors_with_cohere(url):
+def identify_selectors_with_cohere(url):
     try:
         logger.info(f"Sending URL to Cohere for selector identification: {url}")
 
