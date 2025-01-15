@@ -46,7 +46,7 @@ def identify_selectors_with_cohere(url):
             - Review rating
             - Reviewer name
 
-            The output should be a JSON-like dictionary no other text should be included in the output, keep it short and on-point.only return structured json format also browser HTML for zyte should also be present. Example:
+            The output should be a JSON-like dictionary no other text should be included in the output, keep it short and on-point.only return structured json format. Example:
             {{
                 "review": ".col-12.col-sm-12.product-review",
                 "title": ".review-title",
@@ -93,6 +93,7 @@ def extract_reviews_with_zyte(url, selectors):
                 json={
                     "url": f"{url}?page={page_number}",  # Handle pagination by appending page number
                     "httpResponseBody": True,
+                    "browserHtml": True
                 },
             )
 
