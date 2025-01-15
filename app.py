@@ -81,13 +81,13 @@ def extract_reviews_with_webscraping(url, selectors):
         page_number = 1
         retry_limit = 5
         headers = {
-            "Authorization": f"Bearer {web_scraping_api_key}"  # Use Bearer token for authentication
+            "Authorization": f"Bearer {web_scraping_api_key}"  # Correct header format for authentication
         }
 
         while page_number <= retry_limit:
             logger.info(f"Fetching page {page_number} with Web Scraping API: {url}?page={page_number}")
             response = requests.post(
-                "https://api.webscrapingapi.com/v1?",  # Correct endpoint for extraction
+                "https://api.webscrapingapi.com/v1",  # Correct endpoint for extraction
                 headers=headers,
                 json={
                     "url": f"{url}?page={page_number}",
