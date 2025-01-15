@@ -34,45 +34,37 @@ app = Flask(__name__)
 def identify_selectors_with_cohere(url):
     try:
         logger.info(f"Sending URL to Cohere for selector identification: {url}")
-        response = cohere_client.chat(
+        response = cohere_client.generate(
             model="command",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are an AI assistant chatbot and a master of web scraping.",
-                },
-                {
-                    "role": "user",
-                    "content": f"""
-                    Analyze the webpage at {url} and provide CSS selectors for extracting the following elements:
-                    - Review container
-                    - Review title
-                    - Review body
-                    - Review rating
-                    - Reviewer name
+            prompt=f"""
+                Analyze the webpage at {url} and provide CSS selectors for extracting the following elements:
+                - Review container
+                - Review title
+                - Review body
+                - Review rating
+                - Reviewer name
 
-                    The output should be a JSON-like dictionary. Only return structured JSON format and no other text in output. Example:
-                    {{
-                        "review": ".col-12.col-sm-12.product-review",
-                        "title": ".review-title",
-                        "body": ".review-body",
-                        "rating": ".review-rating",
-                        "reviewer": ".reviewer"
-                    }}
-                    """
-                },
-            ]
+                The output should be a JSON-like dictionary. Only return structured JSON format and no other text in output. Example:
+                {{
+                    "review": ".col-12.col-sm-12.product-review",
+                    "title": ".review-title",
+                    "body": ".review-body",
+                    "rating": ".review-rating",
+                    "reviewer": ".reviewer"
+                }}
+            """,
+            max_tokens=300
         )
 
         # Log full response for debugging
         logger.info(f"Cohere API response: {response}")
 
         # Validate response structure
-        if not response or not hasattr(response, "generations") or not response.generations:
-            raise ValueError("Cohere response does not contain valid generations.")
+        if not response or not hasattr(response, "text") or not response.text:
+            raise ValueError("Cohere response does not contain valid text.")
 
         # Extract and parse the response
-        selectors = response.generations[0].text.strip()
+        selectors = response.text.strip()
         logger.info(f"Selectors identified by Cohere: {selectors}")
 
         # Convert the string response into a dictionary
