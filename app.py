@@ -59,12 +59,12 @@ def identify_selectors_with_cohere(url):
         # Log full response for debugging
         logger.info(f"Cohere API response: {response}")
 
-        # Validate response structure
-        if not response or not hasattr(response, "text") or not response.text:
+        # Check if the response contains the expected generations and text
+        if not response.generations or not response.generations[0].text:
             raise ValueError("Cohere response does not contain valid text.")
 
-        # Extract and parse the response
-        selectors = response.text.strip()
+        # Extract and parse the response text
+        selectors = response.generations[0].text.strip()
         logger.info(f"Selectors identified by Cohere: {selectors}")
 
         # Convert the string response into a dictionary
