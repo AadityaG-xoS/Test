@@ -6,7 +6,6 @@ import cohere
 import logging
 import requests
 from scrapy.http import HtmlResponse
-from zyte_api import ZyteAPI
 import time
 
 # Configure logging
@@ -16,18 +15,15 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 cohere_api_key = os.getenv("COHERE_API_KEY")
-zyte_api_key = os.getenv("ZYTE_API_KEY")
+web_scraping_api_key = os.getenv("WEB_SCRAPING_API_KEY")  # Changed to Web Scraping API key
 
 if not cohere_api_key:
     raise EnvironmentError("COHERE_API_KEY environment variable is not set.")
-if not zyte_api_key:
-    raise EnvironmentError("ZYTE_API_KEY environment variable is not set.")
+if not web_scraping_api_key:
+    raise EnvironmentError("WEB_SCRAPING_API_KEY environment variable is not set.")  # Using Web Scraping API
 
 # Initialize Cohere client
 cohere_client = cohere.Client(cohere_api_key)
-
-# Initialize Zyte client
-zyte_client = ZyteAPI(api_key=zyte_api_key)
 
 app = Flask(__name__)
 
@@ -79,16 +75,7 @@ def identify_selectors_with_cohere(url):
         logger.error(f"Error identifying selectors with Cohere: {e}")
         return None
 
-import requests
-import time
-import logging
-from scrapy.http import HtmlResponse
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-def extract_reviews_with_zyte(url, selectors):
+def extract_reviews_with_webscraping(url, selectors):
     try:
         if not isinstance(selectors, dict):
             raise ValueError("Selectors should be a valid dictionary.")
@@ -97,29 +84,28 @@ def extract_reviews_with_zyte(url, selectors):
         page_number = 1
         retry_limit = 5
         headers = {
-            "Authorization": f"Bearer {zyte_api_key}"  # Use Bearer token for authentication
+            "Authorization": f"Bearer {web_scraping_api_key}"  # Use Bearer token for authentication
         }
 
         for _ in range(retry_limit):
-            logger.info(f"Fetching page {page_number} with Zyte: {url}?page={page_number}")
-            response = requests.post(
-                "https://api.zyte.com/v1/extract",
-                headers=headers,  # Send the header with API token
-                json={
-                    "url": f"{url}?page={page_number}",
-                    "httpResponseBody": True,
-                    "browserHtml": True,
-                    "renderJS": True,
+            logger.info(f"Fetching page {page_number} with Web Scraping API: {url}?page={page_number}")
+            response = requests.get(
+                "https://api.webscrapingapi.com/",
+                params={
+                    'api_key': web_scraping_api_key,
+                    'url': f"{url}?page={page_number}",
+                    'render_js': 'true',  # Enable JS rendering for dynamic content
                 },
-                timeout=30  # Set a timeout to prevent hanging
+                headers=headers,
+                timeout=30
             )
 
             if response.status_code != 200:
-                logger.error(f"Failed to fetch the page with Zyte. Status: {response.status_code}")
+                logger.error(f"Failed to fetch the page with Web Scraping API. Status: {response.status_code}")
                 break
 
             response_json = response.json()
-            browser_html = response_json.get("browserHtml")
+            browser_html = response_json.get("content")
 
             if not browser_html:
                 logger.warning(f"No browser HTML found on page {page_number}. Retrying...")
@@ -166,7 +152,7 @@ def extract_reviews_with_zyte(url, selectors):
         logger.error(f"Error with the request: {e}")
         return []
     except Exception as e:
-        logger.error(f"Error extracting reviews with Zyte: {e}")
+        logger.error(f"Error extracting reviews with Web Scraping API: {e}")
         return []
 
 def process_reviews_with_cohere(reviews):
@@ -207,9 +193,9 @@ def home():
                 error_message = "Could not identify selectors for the URL!"
                 return render_template('index.html', reviews=reviews, error=error_message)
 
-            logger.info(f"Selectors passed to Zyte: {selectors}")
+            logger.info(f"Selectors passed to Web Scraping API: {selectors}")
 
-            reviews = extract_reviews_with_zyte(url, selectors)
+            reviews = extract_reviews_with_webscraping(url, selectors)
             if not reviews:
                 error_message = "No reviews found!"
                 return render_template('index.html', reviews=reviews, error=error_message)
@@ -218,9 +204,6 @@ def home():
             if not reviews:
                 error_message = "Error processing reviews with Cohere."
                 return render_template('index.html', reviews=reviews, error=error_message)
-            if not zyte_api_key:
-                 raise ValueError("Zyte API key is missing or not set.")
-                 logger.debug(f"Zyte API Key: {zyte_api_key[:4]}...")  # Only print part of the API key for security reasons
 
             return render_template('index.html', reviews=reviews)
         except Exception as e:
@@ -232,4 +215,5 @@ def home():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)
+
 
