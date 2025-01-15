@@ -79,6 +79,15 @@ def identify_selectors_with_cohere(url):
         logger.error(f"Error identifying selectors with Cohere: {e}")
         return None
 
+import requests
+import time
+import logging
+from scrapy.http import HtmlResponse
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 def extract_reviews_with_zyte(url, selectors):
     try:
         if not isinstance(selectors, dict):
@@ -87,18 +96,22 @@ def extract_reviews_with_zyte(url, selectors):
         reviews = []
         page_number = 1
         retry_limit = 5
+        headers = {
+            "Authorization": f"Bearer {zyte_api_key}"  # Use Bearer token for authentication
+        }
 
         for _ in range(retry_limit):
             logger.info(f"Fetching page {page_number} with Zyte: {url}?page={page_number}")
             response = requests.post(
                 "https://api.zyte.com/v1/extract",
-                auth=(zyte_api_key, ""),
+                headers=headers,  # Send the header with API token
                 json={
                     "url": f"{url}?page={page_number}",
                     "httpResponseBody": True,
                     "browserHtml": True,
                     "renderJS": True,
                 },
+                timeout=30  # Set a timeout to prevent hanging
             )
 
             if response.status_code != 200:
@@ -113,6 +126,10 @@ def extract_reviews_with_zyte(url, selectors):
                 time.sleep(2)
                 continue
 
+            # Log a snippet of the HTML content for debugging
+            logger.info(f"Fetched HTML for page {page_number}: {browser_html[:500]}...")
+
+            # Save the HTML response for debugging purposes
             with open(f"page_{page_number}_browser_html.html", "w", encoding="utf-8") as fp:
                 fp.write(browser_html)
 
@@ -137,10 +154,17 @@ def extract_reviews_with_zyte(url, selectors):
                 })
 
             page_number += 1
-            time.sleep(2)
+            time.sleep(2)  # Add delay to prevent hitting rate limits
 
         logger.info(f"Extracted {len(reviews)} reviews across {page_number - 1} pages.")
         return reviews
+
+    except requests.exceptions.Timeout as e:
+        logger.error(f"Request timed out: {e}")
+        return []
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error with the request: {e}")
+        return []
     except Exception as e:
         logger.error(f"Error extracting reviews with Zyte: {e}")
         return []
