@@ -75,6 +75,17 @@ def identify_selectors_with_cohere(url):
         logger.error(f"Error identifying selectors with Cohere: {e}")
         return None
 
+import time
+import requests
+import logging
+from scrapy.http import HtmlResponse
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+# Assuming web_scraping_api_key is set correctly
+web_scraping_api_key = "your_api_key"
+
 def extract_reviews_with_webscraping(url, selectors):
     try:
         if not isinstance(selectors, dict):
@@ -89,14 +100,15 @@ def extract_reviews_with_webscraping(url, selectors):
 
         for _ in range(retry_limit):
             logger.info(f"Fetching page {page_number} with Web Scraping API: {url}?page={page_number}")
-            response = requests.get(
-                "https://api.webscrapingapi.com/",
-                params={
-                    'api_key': web_scraping_api_key,
-                    'url': f"{url}?page={page_number}",
-                    'render_js': 'true',  # Enable JS rendering for dynamic content
+            response = requests.post(
+                "https://api.webscrapingapi.com/v1/extract",  # Correct endpoint for extraction
+                headers=headers,  # Send the header with API token
+                json={
+                    "url": f"{url}?page={page_number}",
+                    "httpResponseBody": True,
+                    "browserHtml": True,  # Ensure browser-rendered HTML is extracted
+                    "renderJS": True,  # Ensure JavaScript is rendered for dynamic content
                 },
-                headers=headers,
                 timeout=30
             )
 
