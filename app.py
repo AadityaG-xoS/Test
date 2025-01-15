@@ -31,13 +31,14 @@ zyte_client = ZyteAPI(api_key=zyte_api_key)
 
 app = Flask(__name__)
 
-def identify_selectors_with_cohere(url):
+ddef identify_selectors_with_cohere(url):
     try:
         logger.info(f"Sending URL to Cohere for selector identification: {url}")
-        
+
+        # Use the correct argument for the chat method
         response = cohere_client.chat(
             model="command-r-plus",
-            query=f"""
+            message=f"""
             Analyze the webpage at {url} and provide CSS selectors for extracting the following elements:
             - Review container
             - Review title
@@ -57,7 +58,11 @@ def identify_selectors_with_cohere(url):
             preamble="You are an AI assistant chatbot and a master of web scraping."
         )
 
-        # Extract the response text and evaluate it
+        # Check if response has generations
+        if not response or not hasattr(response, "generations") or not response.generations:
+            raise ValueError("Cohere response does not contain valid generations.")
+
+        # Extract and parse the response
         selectors = response.generations[0].text.strip()
         logger.info(f"Selectors identified by Cohere: {selectors}")
 
