@@ -218,6 +218,9 @@ def home():
             if not reviews:
                 error_message = "Error processing reviews with Cohere."
                 return render_template('index.html', reviews=reviews, error=error_message)
+            if not zyte_api_key:
+                 raise ValueError("Zyte API key is missing or not set.")
+                 logger.debug(f"Zyte API Key: {zyte_api_key[:4]}...")  # Only print part of the API key for security reasons
 
             return render_template('index.html', reviews=reviews)
         except Exception as e:
