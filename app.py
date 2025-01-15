@@ -1,12 +1,12 @@
-from dotenv import load_dotenv
 import os
 import json
-from flask import Flask, request, jsonify, render_template
-import cohere
+import time
 import logging
 import requests
+from flask import Flask, request, render_template
+import cohere
+from dotenv import load_dotenv
 from scrapy.http import HtmlResponse
-import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -15,16 +15,17 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 cohere_api_key = os.getenv("COHERE_API_KEY")
-web_scraping_api_key = os.getenv("WEB_SCRAPING_API_KEY")  # Changed to Web Scraping API key
+web_scraping_api_key = os.getenv("WEB_SCRAPING_API_KEY")
 
 if not cohere_api_key:
     raise EnvironmentError("COHERE_API_KEY environment variable is not set.")
 if not web_scraping_api_key:
-    raise EnvironmentError("WEB_SCRAPING_API_KEY environment variable is not set.")  # Using Web Scraping API
+    raise EnvironmentError("WEB_SCRAPING_API_KEY environment variable is not set.")
 
 # Initialize Cohere client
 cohere_client = cohere.Client(cohere_api_key)
 
+# Flask app
 app = Flask(__name__)
 
 def identify_selectors_with_cohere(url):
@@ -42,7 +43,7 @@ def identify_selectors_with_cohere(url):
 
                 The output should be a JSON-like dictionary. Only return structured JSON format and no other text in output. Example:
                 {{
-                    "review": ".col-12.col-sm-12.product-review",
+                    "review": ".product-reviews",
                     "title": ".review-title",
                     "body": ".review-body",
                     "rating": ".review-rating",
@@ -55,18 +56,14 @@ def identify_selectors_with_cohere(url):
         # Log full response for debugging
         logger.info(f"Cohere API response: {response}")
 
-        # Check if the response contains the expected generations and text
         if not response.generations or not response.generations[0].text:
             raise ValueError("Cohere response does not contain valid text.")
 
-        # Extract and parse the response text
         selectors = response.generations[0].text.strip()
         logger.info(f"Selectors identified by Cohere: {selectors}")
 
-        # Convert the string response into a dictionary
+        # Convert to dictionary
         selectors_dict = json.loads(selectors)
-
-        # Ensure it's a valid dictionary
         if not isinstance(selectors_dict, dict):
             raise ValueError("Selectors response is not a valid dictionary.")
 
@@ -74,17 +71,6 @@ def identify_selectors_with_cohere(url):
     except Exception as e:
         logger.error(f"Error identifying selectors with Cohere: {e}")
         return None
-
-import time
-import requests
-import logging
-from scrapy.http import HtmlResponse
-
-# Set up logging
-logger = logging.getLogger(__name__)
-
-# Assuming web_scraping_api_key is set correctly
-web_scraping_api_key = "your_api_key"
 
 def extract_reviews_with_webscraping(url, selectors):
     try:
@@ -98,11 +84,11 @@ def extract_reviews_with_webscraping(url, selectors):
             "Authorization": f"Bearer {web_scraping_api_key}"  # Use Bearer token for authentication
         }
 
-        for _ in range(retry_limit):
+        while page_number <= retry_limit:
             logger.info(f"Fetching page {page_number} with Web Scraping API: {url}?page={page_number}")
             response = requests.post(
                 "https://api.webscrapingapi.com/v1/extract",  # Correct endpoint for extraction
-                headers=headers,  # Send the header with API token
+                headers=headers,
                 json={
                     "url": f"{url}?page={page_number}",
                     "httpResponseBody": True,
@@ -167,27 +153,6 @@ def extract_reviews_with_webscraping(url, selectors):
         logger.error(f"Error extracting reviews with Web Scraping API: {e}")
         return []
 
-def process_reviews_with_cohere(reviews):
-    try:
-        if not reviews:
-            raise ValueError("No reviews to process.")
-
-        processed_reviews = []
-        for review in reviews:
-            processed_review = {
-                "title": f"Processed: {review['title']}",
-                "body": review['body'],
-                "rating": review['rating'],
-                "reviewer": review['reviewer']
-            }
-            processed_reviews.append(processed_review)
-
-        logger.info(f"Processed {len(processed_reviews)} reviews.")
-        return processed_reviews
-    except Exception as e:
-        logger.error(f"Error processing reviews with Cohere: {e}")
-        return []
-
 @app.route('/', methods=['GET', 'POST'])
 def home():
     reviews = []
@@ -212,11 +177,6 @@ def home():
                 error_message = "No reviews found!"
                 return render_template('index.html', reviews=reviews, error=error_message)
 
-            reviews = process_reviews_with_cohere(reviews)
-            if not reviews:
-                error_message = "Error processing reviews with Cohere."
-                return render_template('index.html', reviews=reviews, error=error_message)
-
             return render_template('index.html', reviews=reviews)
         except Exception as e:
             logger.error(f"Error processing: {e}")
@@ -227,5 +187,3 @@ def home():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)
-
-
