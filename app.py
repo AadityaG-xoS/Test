@@ -87,7 +87,7 @@ def extract_reviews_with_webscraping(url, selectors):
         while page_number <= retry_limit:
             logger.info(f"Fetching page {page_number} with Web Scraping API: {url}?page={page_number}")
             response = requests.post(
-                "https://api.webscrapingapi.com/v1/extract",  # Correct endpoint for extraction
+                "https://api.webscrapingapi.com/v1?",  # Correct endpoint for extraction
                 headers=headers,
                 json={
                     "url": f"{url}?page={page_number}",
