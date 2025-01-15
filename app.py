@@ -93,7 +93,8 @@ def extract_reviews_with_zyte(url, selectors):
                 json={
                     "url": f"{url}?page={page_number}",  # Handle pagination by appending page number
                     "httpResponseBody": True,
-                    "browserHtml": True
+                    "browserHtml": True,
+                    "renderJS": True,
                 },
             )
 
